@@ -1,6 +1,5 @@
 // src/queues/imageQueue.ts
 import { Queue, Worker, Job, JobProgress } from 'bullmq';
-import axios from 'axios';
 import { Buffer } from 'buffer';
 import { redisClient } from '../config/redis';
 import { generateImage } from '../services/dalleService';
@@ -62,11 +61,12 @@ const processImageJob = async (job: Job<ImageJobData, ImageJobResult>): Promise<
   try {
     await job.updateProgress(10);
 
-    // Step 1: Generate image (with retries)
+    // Step 1: Generate image (with retries). generateImage now returns the raw
+    // image bytes (gpt-image-1 returns base64, not a URL), so there is no separate download step.
     logger.info(`[Job ${job.id}] Generating image...`, { prompt });
-    let tempImageUrl: string | null = null;
+    let imageData: Buffer | null = null;
     let retryCount = 0; const maxRetries = 3; let lastError: any = null;
-    while (retryCount < maxRetries && !tempImageUrl) {
+    while (retryCount < maxRetries && !imageData) {
         try {
           if (retryCount > 0) {
             const delay = Math.pow(2, retryCount) * 1000;
@@ -74,31 +74,12 @@ const processImageJob = async (job: Job<ImageJobData, ImageJobResult>): Promise<
             await new Promise(resolve => setTimeout(resolve, delay));
           }
           // Pass the subscription tier to the image generation service
-          tempImageUrl = await generateImage(prompt, subscriptionTier);
-          if (!tempImageUrl) throw new Error('No URL returned from image generation service');
+          imageData = await generateImage(prompt, subscriptionTier);
+          if (!imageData || imageData.length === 0) throw new Error('No image data returned from image generation service');
         } catch (err) { lastError = err; retryCount++; if (retryCount >= maxRetries) await job.log(`All ${maxRetries} image generation attempts failed.`); }
     }
-    if (!tempImageUrl) { await job.log('Image generation failed: ' + (lastError?.message || 'No URL returned')); throw lastError || new Error('Failed to generate image after all retries'); }
-    await job.updateProgress(50); await job.log(`Generated temp URL: ${tempImageUrl}`);
-
-    // Step 2: Download image (with retries)
-    logger.info(`[Job ${job.id}] Downloading image...`);
-    let imageData: Buffer | null = null;
-    retryCount = 0; lastError = null;
-    while (retryCount < maxRetries && !imageData) {
-        try {
-             if (retryCount > 0) {
-                const delay = Math.pow(2, retryCount) * 1000;
-                await job.log(`Retrying image download (attempt ${retryCount + 1}/${maxRetries}) after ${delay/1000}s delay`);
-                await new Promise(resolve => setTimeout(resolve, delay));
-             }
-             const imageResponse = await axios.get(tempImageUrl, { responseType: 'arraybuffer', timeout: 30000 });
-             imageData = Buffer.from(imageResponse.data);
-             if (!imageData || imageData.length === 0) throw new Error('Downloaded image data is empty');
-        } catch (err) { lastError = err; retryCount++; if (retryCount >= maxRetries) await job.log(`All ${maxRetries} image download attempts failed.`); }
-    }
-    if (!imageData) { await job.log('Image download failed: ' + (lastError?.message || 'Empty data received')); throw lastError || new Error('Failed to download image after all retries'); }
-    await job.updateProgress(75); await job.log(`Downloaded image data (${imageData.length} bytes).`);
+    if (!imageData) { await job.log('Image generation failed: ' + (lastError?.message || 'No data returned')); throw lastError || new Error('Failed to generate image after all retries'); }
+    await job.updateProgress(75); await job.log(`Generated image data (${imageData.length} bytes).`);
 
     // Step 3: Upload image (with retries)
     logger.info(`[Job ${job.id}] Uploading image...`);

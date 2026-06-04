@@ -129,14 +129,18 @@ export const signOut = async (): Promise<void> => {
 export const getCurrentUserWithPreferences = async (userIdFromAuthMiddleware: string): Promise<BackendUserModel | null> => {
   logger.info(`Backend AuthService: Getting current user profile and preferences for user ${userIdFromAuthMiddleware}`);
   try {
+    // NOTE: We intentionally do NOT use a PostgREST embedded join here
+    // (e.g. `user_preferences ( * )`). `user_preferences.user_id` references
+    // auth.users, not profiles, so PostgREST cannot resolve the relationship and
+    // throws "Could not find a relationship between 'profiles' and 'user_preferences'".
+    // Instead we fetch the profile and preferences in two separate queries.
     const { data: authUserWithPrefsData, error: fetchError } = await supabase
-      .from('profiles') 
+      .from('profiles')
       .select(`
         id,
         username,
         avatar_url,
-        user_app_id, 
-        user_preferences ( * )
+        user_app_id
       `)
       .eq('id', userIdFromAuthMiddleware)
       .single();
@@ -174,13 +178,21 @@ export const getCurrentUserWithPreferences = async (userIdFromAuthMiddleware: st
     }
     const coreAuthUser = authUserData.user;
 
+    // Fetch preferences separately (see note above on why we avoid the embed).
     let preferences: BackendUserPreferencesModel | undefined = undefined;
-    const rawPrefsData = Array.isArray(authUserWithPrefsData.user_preferences) 
-        ? authUserWithPrefsData.user_preferences[0] 
-        : authUserWithPrefsData.user_preferences;
+    const { data: rawPrefsData, error: prefsError } = await supabase
+      .from('user_preferences')
+      .select('*')
+      .eq('user_id', userIdFromAuthMiddleware)
+      .maybeSingle();
+
+    if (prefsError) {
+      // Non-fatal: log and continue with undefined preferences.
+      logger.warn(`Backend AuthService: Could not fetch user_preferences for ${userIdFromAuthMiddleware}: ${prefsError.message}`);
+    }
 
     if (rawPrefsData) {
-      const dbPrefs = rawPrefsData as UserPreferencesRow; 
+      const dbPrefs = rawPrefsData as UserPreferencesRow;
       preferences = {
         dietaryRestrictions: dbPrefs.dietary_restrictions ?? [],
         favoriteCuisines: dbPrefs.favorite_cuisines ?? [],

@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+/*
+  Kitchen Assistant brand theme.
+  Mirrors the Flutter app: light surfaces, deep-red primary (#AF1C1C).
+*/
+@theme {
+  --color-background: #ffffff;
+  --color-foreground: #1a1a1a;
+
+  --color-brand-50: #fdf2f2;
+  --color-brand-100: #fce4e4;
+  --color-brand-200: #f9caca;
+  --color-brand-300: #f2a3a3;
+  --color-brand-400: #e76d6d;
+  --color-brand-500: #d54343;
+  --color-brand-600: #c53737;
+  --color-brand: #af1c1c;
+  --color-brand-700: #af1c1c;
+  --color-brand-800: #921818;
+  --color-brand-900: #791818;
+
+  --color-surface: #ffffff;
+  --color-muted: #f6f6f7;
+  --color-muted-foreground: #6b7280;
+  --color-border: #e5e7eb;
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --radius-card: 1rem;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+}
+
+/* Thin, subtle scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db transparent;
+}
+
+/* Shimmer used by skeleton loaders */
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+.shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.6),
+    transparent
+  );
+  animation: shimmer 1.5s infinite;
+}

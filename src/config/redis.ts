@@ -43,6 +43,37 @@ const createRedisClient = (): Redis => {
         return delay;
       },
     });
+
+    // --- CRITICAL FIX FOR BULLMQ + UPSTASH ---
+    // Intercept the 'info' command. BullMQ strictly requires a `redis_version` 
+    // formatted with \r\n line breaks. Upstash sometimes fails this parse.
+    const originalInfo = redis.info.bind(redis);
+    
+    // @ts-ignore - Overriding internal ioredis method for BullMQ compatibility
+    redis.info = async (...args: any[]) => {
+      try {
+        const infoStr = await originalInfo(...args);
+        
+        if (typeof infoStr === 'string') {
+          // Normalize all line breaks to \r\n (which BullMQ strictly requires)
+          let formattedInfo = infoStr.replace(/\r?\n/g, '\r\n');
+          
+          // If the 'redis_version:' tag is missing, inject a dummy version
+          if (!formattedInfo.includes('redis_version:')) {
+            formattedInfo += '\r\nredis_version:7.2.0\r\n';
+          }
+          
+          return formattedInfo;
+        }
+        
+        // Fallback if the result isn't a string at all
+        return '# Server\r\nredis_version:7.2.0\r\n';
+      } catch (err) {
+        // Fallback in case of a proxy block or command failure
+        return '# Server\r\nredis_version:7.2.0\r\n';
+      }
+    };
+    // -----------------------------------------
     
     // Event handlers for better monitoring
     redis.on('connect', () => {

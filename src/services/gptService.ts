@@ -402,23 +402,8 @@ async function attemptChatCompletion(
     temperature: number = 0.7,
     maxTokens: number = 1024
 ): Promise<AiChatResponse> {
-    // Simplified, more flexible system prompt
-    const systemPrompt = `
-You are Delisio, a helpful cooking assistant. 
-
-CRITICAL: You MUST ALWAYS respond, no matter what the user says.
-- If the message is unclear, ask for clarification
-- If it's off-topic, gently redirect to cooking
-- If it's gibberish, respond helpfully anyway
-- NEVER refuse to respond
-
-Your response MUST be valid JSON:
-{
-  "reply": "Your helpful response",
-  "suggestions": ["Optional", "suggestions", "array"] or null
-}
-
-Be friendly, helpful, and always provide value.`;
+    // Use the centralized Concierge system prompt (single source of truth in promptBuilder).
+    const { systemPrompt } = buildChatPrompt(message);
 
     const messages: Array<OpenAI.Chat.Completions.ChatCompletionMessageParam> = [
         { role: 'system', content: systemPrompt }
@@ -451,13 +436,26 @@ Be friendly, helpful, and always provide value.`;
         }
 
         const parsed = JSON.parse(content);
-        
+
         // Validate and clean the response
-        return {
+        const cleaned: AiChatResponse = {
             reply: String(parsed.reply || "I can help you with that! What would you like to cook?"),
             suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions.map(String) : [],
         };
-        
+
+        // Extract structured Concierge intent metadata for the frontend RecipeIntentCard.
+        if (parsed.intent_meta && typeof parsed.intent_meta === 'object') {
+            const im = parsed.intent_meta;
+            cleaned.intent_meta = {
+                is_recipe_intent: !!im.is_recipe_intent,
+                hero_recipe_title: im.hero_recipe_title ? String(im.hero_recipe_title) : null,
+                prep_time: im.prep_time ? String(im.prep_time) : null,
+                tags: Array.isArray(im.tags) ? im.tags.map(String).slice(0, 3) : [],
+            };
+        }
+
+        return cleaned;
+
     } catch (error) {
         // Log detailed error for debugging
         logger.error('OpenAI API call failed:', {

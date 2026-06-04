@@ -24,6 +24,7 @@ export interface RecipeJobData {
     cancelled?: boolean;
     enableProgressiveDisplay?: boolean;
     subscriptionTier: SubscriptionTier;
+    isLocked?: boolean; // Tease & Lock: when true, the user's copy is saved/returned locked
 }
 
 // Interface for recipe job result (no changes needed)
@@ -62,7 +63,7 @@ export const imageQueueEvents = new QueueEvents('image-generation', { // Must ma
 // Define the processor function separately
 const processRecipeJob = async (job: Job<RecipeJobData, RecipeJobResult, 'generate-recipe'>): Promise<RecipeJobResult> => {
     logger.info(`[Worker] Recipe Processor function ENTERED for job: ${job.id}`);
-    const { query, userPreferences, requestId, userId, enableProgressiveDisplay, subscriptionTier } = job.data;
+    const { query, userPreferences, requestId, userId, enableProgressiveDisplay, subscriptionTier, isLocked = false } = job.data;
     const globalRecipeId = uuidv4();
 
     try {
@@ -115,6 +116,7 @@ const processRecipeJob = async (job: Job<RecipeJobData, RecipeJobResult, 'genera
             tags: parsedRecipeData.tags,
             quality_score: parsedRecipeData.quality_score,
             similarity_hash: parsedRecipeData.similarity_hash,
+            isLocked, // Tease & Lock: reflected in progressive-display partials so the UI can blur early
         };
 
         // Update partial recipe cache (as before)
@@ -214,10 +216,13 @@ const processRecipeJob = async (job: Job<RecipeJobData, RecipeJobResult, 'genera
 
         // --- Step 6: Build final GLOBAL recipe object ---
         // Now includes the determined thumbnail_url
+        // The GLOBAL copy (user_id = null) powers the public Discover feed, so it is always
+        // saved UNLOCKED. Only the user's personal copy (and the returned tease) get locked.
         const completeGlobalRecipe: Recipe = {
             ...initialRecipe,               // Contains globalRecipeId
             steps: stepsWithImages,         // Contains step image URLs
-            thumbnail_url: finalThumbnailUrl // Assign the URL from the last step (or undefined)
+            thumbnail_url: finalThumbnailUrl, // Assign the URL from the last step (or undefined)
+            isLocked: false                 // Public catalog copy is never locked
         };
 
 
@@ -241,6 +246,7 @@ const processRecipeJob = async (job: Job<RecipeJobData, RecipeJobResult, 'genera
             const userSpecificRecipeData: Recipe = {
                 ...completeGlobalRecipe, // Copy global data (includes steps AND thumbnail_url)
                 id: userRecipeId,
+                isLocked, // Tease & Lock: free users get a locked personal copy
             };
             logger.info(`[Job ${job.id}] Attempting to save user-specific recipe copy ${userRecipeId} for user ${userId}...`);
             try {
@@ -259,7 +265,10 @@ const processRecipeJob = async (job: Job<RecipeJobData, RecipeJobResult, 'genera
         logger.info(`[Job ${job.id}] Recipe generation process completed successfully: "${completeGlobalRecipe.title}"`);
         await job.updateProgress(100);
 
-        const resultRecipe = userSpecificRecipeDataForResult ?? completeGlobalRecipe;
+        // For logged-in users we return their (possibly locked) personal copy.
+        // For anonymous users there is no personal copy; return the global recipe but apply the
+        // tease lock to the response object WITHOUT persisting it on the public global row.
+        const resultRecipe: Recipe = userSpecificRecipeDataForResult ?? { ...completeGlobalRecipe, isLocked };
         logger.debug(`[Worker] Returning final recipe object for job ${job.id}:`, { recipe: resultRecipe });
         return { recipe: resultRecipe }; // Return the final recipe object
 

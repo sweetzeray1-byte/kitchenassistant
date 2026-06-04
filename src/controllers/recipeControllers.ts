@@ -25,6 +25,7 @@ import { redisClient } from '../config/redis';
 import { recipeQueue } from '../queues/recipeQueue';
 import { updatePartialRecipe } from '../services/recipeUpdateService';
 import { SubscriptionTier } from '../models/Subscription';
+import { getUserSubscription } from '../services/subscriptionService';
 
 // Fallback cache (as provided before)
 const recipeCache = new Map<string, string>();
@@ -96,7 +97,25 @@ export const generateRecipe = async (req: Request, res: Response, next: NextFunc
       // Access user info safely from req object
       const userId = (req as any).user?.id;
       const userPreferences = (req as any).user?.preferences;
-      const subscriptionTier = (req as any).subscriptionTier || 'free';
+
+      // --- TEASE & LOCK: determine the user's tier and whether this recipe is locked ---
+      // Growth strategy: ALWAYS generate the recipe, but lock it for free/anonymous users.
+      // Paid tiers (basic/premium) receive a fully unlocked recipe.
+      // NOTE: per-month recipe usage tracking is currently stubbed in subscriptionService,
+      // so we lock purely by tier rather than by a remaining-generations counter for now.
+      let subscriptionTier: SubscriptionTier = (req as any).subscriptionTier || 'free';
+      if (userId) {
+        try {
+          const subscription = await getUserSubscription(userId);
+          if (subscription?.tier) {
+            subscriptionTier = subscription.tier;
+          }
+        } catch (subError) {
+          logger.warn(`Could not resolve subscription for user ${userId}; defaulting to free tier for lock decision.`, { error: subError });
+        }
+      }
+      const isLocked = subscriptionTier === 'free';
+      logger.info(`Recipe ${requestId} lock decision: tier=${subscriptionTier}, isLocked=${isLocked} (user: ${userId ?? 'anonymous'})`);
 
       // Add the job to the queue
       const job = await recipeQueue.add(
@@ -108,7 +127,8 @@ export const generateRecipe = async (req: Request, res: Response, next: NextFunc
           userId: userId, // Pass potentially undefined userId
           save, // Pass save flag to worker
           enableProgressiveDisplay: true,
-          subscriptionTier: subscriptionTier
+          subscriptionTier: subscriptionTier,
+          isLocked // Pass the lock decision to the worker
         },
         { // Job options
           jobId: requestId // Use requestId as jobId for easier tracking
@@ -271,13 +291,10 @@ const generateRecipeOriginal = async (req: Request, res: Response, next: NextFun
 
             let permanentUrl: string | undefined = undefined;
             try {
-                logger.info(`Requesting realistic temporary image URL for step ${index + 1}...`);
-                const tempImageUrl = await generateImage(imagePrompt, subscriptionTier as SubscriptionTier);
-                if (tempImageUrl) {
-                    logger.info(`Downloading temporary image for step ${index + 1}...`);
-                    const imageResponse = await fetch(tempImageUrl);
-                    if (!imageResponse.ok) throw new Error(`Failed to download image: ${imageResponse.statusText}`);
-                    const imageData = Buffer.from(await imageResponse.arrayBuffer());
+                logger.info(`Requesting image bytes for step ${index + 1}...`);
+                // generateImage now returns the raw image bytes (gpt-image-1 base64), so we upload directly.
+                const imageData = await generateImage(imagePrompt, subscriptionTier as SubscriptionTier);
+                if (imageData && imageData.length > 0) {
                     logger.info(`Uploading image data for step ${index + 1} (${imageData.length} bytes)...`);
                     const filePath = `public/steps/${recipeId}/${index}.png`;
                     permanentUrl = await uploadImageToStorage(imageData, filePath, 'image/png');
@@ -290,7 +307,7 @@ const generateRecipeOriginal = async (req: Request, res: Response, next: NextFun
                         await updatePartialRecipe(requestId, workingRecipe);
                     }
 
-                } else { logger.warn(`No temporary image URL for step ${index + 1}.`); }
+                } else { logger.warn(`No image data for step ${index + 1}.`); }
             } catch (error) { logger.error(`Failed to process image for step ${index + 1} (Sync Flow):`, error); }
             stepsWithImages.push({
                 text: stepText,

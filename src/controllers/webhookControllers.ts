@@ -40,8 +40,8 @@ const mapRevenueCatEntitlementsToTier = (entitlementIds?: string[] | null): Subs
   if (!entitlementIds || entitlementIds.length === 0) {
     return 'free';
   }
-  // IMPORTANT: Replace 'TestPro' with your actual "pro" (premium) entitlement ID from RevenueCat
-  if (entitlementIds.includes('TestPro')) {
+  // Must match the entitlement identifier configured in RevenueCat (the Flutter app uses 'Pro').
+  if (entitlementIds.includes('Pro')) {
     return 'premium';
   }
   // Add other mappings if you have more tiers, e.g., 'basic'
@@ -53,10 +53,12 @@ const mapRevenueCatEntitlementsToTier = (entitlementIds?: string[] | null): Subs
 
 export const handleRevenueCatWebhook = async (req: Request, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
-  const revenueCatWebhookKey = process.env.REVENUECAT_WEBHOOK_KEY; // Use REVENUECAT_WEBHOOK_KEY
+  // Accept either env var name (REVENUECAT_WEBHOOK_KEY or the legacy REVENUECAT_WEBHOOK_SECRET).
+  // This must match the "Authorization header value" configured on the RevenueCat webhook.
+  const revenueCatWebhookKey = process.env.REVENUECAT_WEBHOOK_KEY || process.env.REVENUECAT_WEBHOOK_SECRET;
 
   if (!revenueCatWebhookKey) {
-    logger.error('REVENUECAT_WEBHOOK_KEY is not configured on the server.');
+    logger.error('RevenueCat webhook auth key is not configured on the server (set REVENUECAT_WEBHOOK_KEY or REVENUECAT_WEBHOOK_SECRET).');
     return res.status(500).send('Webhook error: Server misconfiguration.');
   }
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -205,6 +207,24 @@ export const handleRevenueCatWebhook = async (req: Request, res: Response, next:
     }
 
     logger.info(`RC Webhook: Subscription record upserted for user_id ${internalUserId} to tier ${newTier}, status ${newStatus}.`);
+
+    // --- TEASE & LOCK: Post-purchase mass unlock ---
+    // When the user moves to (or stays on) a paid, active tier, immediately unlock all of their
+    // previously-locked recipes so the value they teased becomes fully available.
+    if (newTier !== 'free' && newStatus === 'active') {
+      const { error: unlockError } = await supabase
+        .from('recipes')
+        .update({ is_locked: false })
+        .eq('user_id', internalUserId)
+        .eq('is_locked', true);
+
+      if (unlockError) {
+        // Non-fatal: the subscription is already active; log and continue.
+        logger.error(`RC Webhook: Failed to mass-unlock recipes for user_id ${internalUserId}. Error: ${unlockError.message}`);
+      } else {
+        logger.info(`RC Webhook: Mass-unlocked locked recipes for user_id ${internalUserId} (tier ${newTier}).`);
+      }
+    }
 
     if (needsUsageReset) {
       // Use the periodStart and periodEnd determined for the current event

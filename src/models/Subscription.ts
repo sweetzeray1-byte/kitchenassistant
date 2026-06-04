@@ -63,7 +63,7 @@ export interface FeatureLimits {
 export const SUBSCRIPTION_FEATURE_LIMITS: Record<SubscriptionTier, FeatureLimits> = {
   free: {
     recipeGenerationsPerMonth: 1,
-    aiChatRepliesPerPeriod: 3,
+    aiChatRepliesPerPeriod: 40, // Registered free users
     imageQuality: 'standard',
     imageSize: '1024x1024',
   },
@@ -84,6 +84,14 @@ export const SUBSCRIPTION_FEATURE_LIMITS: Record<SubscriptionTier, FeatureLimits
 export function getFeatureLimits(tier: SubscriptionTier): FeatureLimits {
   return SUBSCRIPTION_FEATURE_LIMITS[tier] || SUBSCRIPTION_FEATURE_LIMITS.free;
 }
+
+/**
+ * AI chat replies allowed for an UNREGISTERED (anonymous) user before they must
+ * register. After this many replies the chat endpoint returns a
+ * REGISTRATION_REQUIRED response and the app shows a mandatory sign-up prompt.
+ * Registered free users get the higher SUBSCRIPTION_FEATURE_LIMITS.free limit (40).
+ */
+export const ANONYMOUS_AI_CHAT_REPLY_LIMIT = 10;
 
 /**
  * Type for subscription response to clients (Flutter app).

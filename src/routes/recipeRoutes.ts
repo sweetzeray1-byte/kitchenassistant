@@ -85,16 +85,26 @@ router.get('/discover', optionalAuthenticate, async (req, res, next) => {
       tagsArray = tags.split(',').map(tag => tag.trim());
     }
 
+    const searchQuery = typeof query === 'string' ? query : undefined;
+
     const recipes = await getDiscoverRecipes({
       category: typeof category === 'string' ? category : undefined,
       tags: tagsArray,
       sort: typeof sort === 'string' ? sort : 'recent',
       limit: typeof limit === 'string' ? parseInt(limit) : 20,
       offset: typeof offset === 'string' ? parseInt(offset) : 0,
-      query: typeof query === 'string' ? query : undefined,
+      query: searchQuery,
     });
 
-    res.status(200).json({ recipes });
+    // --- MAGIC SEARCH: when a search yields no existing recipes, tell the frontend it can
+    // offer "Create this recipe with AI right now" (the MagicSearchCard funnel). ---
+    const canGenerate = !!(searchQuery && searchQuery.trim() !== '' && recipes.length === 0);
+
+    res.status(200).json({
+      recipes,
+      can_generate: canGenerate,
+      suggested_query: canGenerate ? searchQuery : null,
+    });
   } catch (error) {
     next(error);
   }

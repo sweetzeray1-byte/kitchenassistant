@@ -1,24 +1,26 @@
 import openai, { OpenAI, DALLE_MODEL } from './openaiClient';
 import { logger } from '../utils/logger'; // Assuming you have a logger utility
 
-// Tiered configuration options
+// Tiered configuration options.
+// NOTE: These use gpt-image-1 valid values:
+//   size:    '1024x1024' | '1536x1024' | '1024x1536' | 'auto'
+//   quality: 'low' | 'medium' | 'high' | 'auto'
+// (gpt-image-1 does NOT accept dall-e-3's 'hd'/'standard' quality, the 'style'
+//  parameter, or 'response_format' — and it returns base64, not a URL.)
 const TIER_CONFIG = {
   free: {
-    size: '1792x1024', // Changed from '1024x1024' to premium's size
-    quality: 'hd',       // Changed from 'standard' to premium's quality
-    style: 'natural',
-    enhancementLevel: 'full' // Changed from 'minimal' to match premium's potential for better results with HD
+    size: '1536x1024',
+    quality: 'medium',
+    enhancementLevel: 'full'
   },
   basic: {
     size: '1024x1024',
-    quality: 'standard',
-    style: 'natural',
+    quality: 'medium',
     enhancementLevel: 'moderate'
   },
   premium: {
-    size: '1792x1024',
-    quality: 'hd',
-    style: 'natural',
+    size: '1536x1024',
+    quality: 'high',
     enhancementLevel: 'full'
   }
 };
@@ -52,10 +54,9 @@ export const generateImage = async (
   subscriptionTier: 'free' | 'basic' | 'premium' = 'free',
   options?: {
     enhancePrompt?: boolean,
-    forceHighQuality?: boolean, // This option can still be used to force HD if other tiers were different
-    customStyle?: 'natural' | 'vivid'
+    forceHighQuality?: boolean // Forces premium size/quality
   }
-): Promise<string> => {
+): Promise<Buffer> => {
   try {
     // Get tier configuration
     // If an invalid tier is passed, default to 'free' tier settings
@@ -78,36 +79,35 @@ export const generateImage = async (
     // If forceHighQuality is true, it uses premium settings.
     const imageSize = options?.forceHighQuality ? TIER_CONFIG.premium.size : tierConfig.size;
     const imageQuality = options?.forceHighQuality ? TIER_CONFIG.premium.quality : tierConfig.quality;
-    const imageStyle = options?.customStyle || tierConfig.style;
 
-    logger.info(`dalleService: Generating image with DALL-E. Effective settings:`, {
+    logger.info(`dalleService: Generating image. Effective settings:`, {
+        model: DALLE_MODEL,
         tierUsed: currentTier,
         promptUsed: processedPrompt.substring(0,100) + (processedPrompt.length > 100 ? "..." : ""), // Log a bit more of the prompt
         size: imageSize,
         quality: imageQuality,
-        style: imageStyle,
         isEnhanced: shouldEnhancePrompt
     });
 
+    // gpt-image-1 does not accept 'style' or 'response_format', and always returns base64.
     const response = await openai.images.generate({
-      model: DALLE_MODEL, // Ensure DALLE_MODEL is correctly defined (e.g., 'dall-e-3')
+      model: DALLE_MODEL, // gpt-image-1 (set via DALLE_MODEL env)
       prompt: processedPrompt,
       n: 1,
-      size: imageSize as '256x256' | '512x512' | '1024x1024' | '1792x1024' | '1024x1792', // DALL-E 3 supported sizes
-      quality: imageQuality as 'standard' | 'hd',
-      style: imageStyle as 'natural' | 'vivid', // DALL-E 3 supported styles
-      response_format: 'url',
+      size: imageSize as '1024x1024' | '1536x1024' | '1024x1536' | 'auto',
+      quality: imageQuality as 'low' | 'medium' | 'high' | 'auto',
     });
 
-    const imageUrl = response.data && response.data[0]?.url;
+    const b64 = response.data && response.data[0]?.b64_json;
 
-    if (!imageUrl) {
-      logger.error('dalleService: No image URL received from DALL-E response.', { responseData: response.data });
-      throw new Error('No image URL received from DALL-E');
+    if (!b64) {
+      logger.error('dalleService: No image data received from the image model response.', { responseData: response.data });
+      throw new Error('No image data received from the image model');
     }
 
-    logger.info(`dalleService: Image generated successfully. URL (first 50 chars): ${imageUrl.substring(0,50)}...`);
-    return imageUrl;
+    const imageBuffer = Buffer.from(b64, 'base64');
+    logger.info(`dalleService: Image generated successfully (${imageBuffer.length} bytes).`);
+    return imageBuffer;
 
   } catch (error) {
     const technicalErrorMessage = error instanceof Error ? error.message : 'Unknown error generating image';

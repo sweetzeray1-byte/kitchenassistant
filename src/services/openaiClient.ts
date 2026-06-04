@@ -57,5 +57,5 @@ export default openai;
 export { OpenAI };
 
 // Export common configurations
-export const GPT_MODEL = process.env.GPT_MODEL || 'gpt-4-1106-preview';
-export const DALLE_MODEL = process.env.DALLE_MODEL || 'dall-e-3';
+export const GPT_MODEL = process.env.GPT_MODEL || 'gpt-4o-mini';
+export const DALLE_MODEL = process.env.DALLE_MODEL || 'gpt-image-1';

@@ -103,6 +103,7 @@ export const saveRecipe = async (recipe: Recipe, userId: string | null): Promise
             quality_score: recipe.quality_score ?? null,
             views: recipe.views || 0,
             thumbnail_url: recipe.thumbnail_url ?? null, // <-- MODIFIED: Save the thumbnail URL
+            is_locked: recipe.isLocked ?? false, // <-- Tease & Lock: persist lock state
         };
 
         const { data, error } = await supabase.from('recipes').upsert(recipeData, { onConflict: 'id' }).select().single();
@@ -234,6 +235,7 @@ export const getUserRecipes = async (userId: string): Promise<Recipe[]> => {
       views: item.views ?? 0,
       quality_score: item.quality_score ?? undefined,
       thumbnail_url: item.thumbnail_url ?? undefined, // Include thumbnail_url
+      isLocked: item.is_locked ?? false, // Tease & Lock state
       similarity_hash: item.similarity_hash ?? undefined, // Keep other fields
     }));
   } catch (error) { logger.error('Error fetching user recipes:', { userId, error }); throw new Error(`Failed to fetch recipes: ${(error as Error).message}`); }
@@ -284,6 +286,7 @@ export const getRecipeById = async (recipeId: string): Promise<Recipe | null> =>
       quality_score: data.quality_score ?? undefined,
       similarity_hash: data.similarity_hash ?? undefined,
       thumbnail_url: data.thumbnail_url ?? undefined, // Include thumbnail_url
+      isLocked: data.is_locked ?? false, // Tease & Lock state
     };
   } catch (error) { logger.error('Error fetching recipe by ID:', { recipeId, error }); throw new Error(`Failed to fetch recipe: ${(error as Error).message}`);}
 };
@@ -316,6 +319,7 @@ export const getDiscoverRecipes = async ({ category, tags, sort = 'recent', limi
       prepTime: item.prep_time_minutes ?? undefined, cookTime: item.cook_time_minutes ?? undefined, totalTime: item.total_time_minutes ?? undefined,
       category: item.category ?? undefined, tags: item.tags as string[] | undefined, views: item.views ?? 0, quality_score: item.quality_score ?? undefined,
       thumbnail_url: item.thumbnail_url ?? undefined, // Include thumbnail_url
+      isLocked: item.is_locked ?? false, // Tease & Lock state
     }));
   } catch (error) { logger.error('Error fetching discover recipes:', error); throw new Error(`Failed to fetch discover recipes: ${(error as Error).message}`); }
 };
@@ -341,6 +345,7 @@ export const getPopularRecipes = async (limit: number = 10): Promise<Recipe[]> =
       prepTime: item.prep_time_minutes ?? undefined, cookTime: item.cook_time_minutes ?? undefined, totalTime: item.total_time_minutes ?? undefined,
       category: item.category ?? undefined, tags: item.tags as string[] | undefined, views: item.views ?? 0, quality_score: item.quality_score ?? undefined,
       thumbnail_url: item.thumbnail_url ?? undefined, // Include thumbnail_url
+      isLocked: item.is_locked ?? false, // Tease & Lock state
     }));
   } catch (error) { logger.error('Error fetching popular recipes:', error); throw new Error(`Failed to fetch popular recipes: ${(error as Error).message}`); }
 };
@@ -370,6 +375,7 @@ export const getCategoryRecipes = async (categoryId: string, { limit = 20, offse
       prepTime: item.prep_time_minutes ?? undefined, cookTime: item.cook_time_minutes ?? undefined, totalTime: item.total_time_minutes ?? undefined,
       category: item.category ?? undefined, tags: item.tags as string[] | undefined, views: item.views ?? 0, quality_score: item.quality_score ?? undefined,
       thumbnail_url: item.thumbnail_url ?? undefined, // Include thumbnail_url
+      isLocked: item.is_locked ?? false, // Tease & Lock state
     }));
   } catch (error) { logger.error('Error fetching category recipes:', { categoryId, error }); throw new Error(`Failed to fetch category recipes: ${(error as Error).message}`); }
 };
@@ -523,6 +529,7 @@ export const getFavoriteRecipes = async (userId: string): Promise<Recipe[]> => {
         isFavorite: true, // Set flag as true because these were fetched via favorites table
         category: item.category ?? undefined, tags: item.tags as string[] | undefined, views: item.views ?? 0, quality_score: item.quality_score ?? undefined,
         thumbnail_url: item.thumbnail_url ?? undefined, // Include thumbnail_url
+      isLocked: item.is_locked ?? false, // Tease & Lock state
         similarity_hash: item.similarity_hash ?? undefined, // Keep other fields
     }));
   } catch (error) { logger.error('Error fetching favorite recipes:', { userId, error }); throw new Error(`Failed to fetch favorites: ${(error as Error).message}`); }

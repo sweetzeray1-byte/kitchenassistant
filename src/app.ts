@@ -62,7 +62,7 @@ if (process.env.NODE_ENV === 'production') {
 // Regular middleware
 app.use(express.json({ limit: '1mb' })); // Limit request size
 app.use(cors({
-  origin: process.env.FRONTEND_URL || '*',
+  origin: (process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean) : true),
   credentials: true
 }));
 

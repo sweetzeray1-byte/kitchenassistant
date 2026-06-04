@@ -53,6 +53,10 @@ export interface Recipe {
   // --- FIELD FOR RECIPE THUMBNAIL ---
   thumbnail_url?: string;     // Optional: URL for the main recipe image/thumbnail
   // --- END THUMBNAIL FIELD ---
+
+  // --- TEASE & LOCK PAYWALL ---
+  isLocked?: boolean;         // Optional: When true, the frontend blurs ingredients/instructions until the user unlocks via subscription
+  // --- END TEASE & LOCK ---
 }
 
 /**
@@ -161,5 +165,7 @@ export const createRecipe = (recipeData: Partial<Recipe>): Recipe => {
       isFavorite: recipeData.isFavorite,
       // Assign thumbnail_url if present
       thumbnail_url: recipeData.thumbnail_url, // Assign thumbnail_url here too
+      // Assign lock state (defaults to unlocked)
+      isLocked: recipeData.isLocked ?? false,
   };
 };
