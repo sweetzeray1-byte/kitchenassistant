@@ -36,11 +36,16 @@ app.use('/admin', adminRoutes);
 // Error handling middleware
 app.use(errorHandler);
 
-// Start server
-const PORT = process.env.ADMIN_PORT || 3003;
-app.listen(PORT, () => {
-  logger.info(`Server running on port ${PORT}`);
-});
+// Start server only when this file is run directly (e.g. a standalone admin
+// process). When imported by src/app.ts as a mounted router, do NOT listen —
+// otherwise it binds port 3003 first and Railway routes the public domain to
+// the admin server instead of the real API on $PORT.
+if (require.main === module) {
+  const PORT = process.env.ADMIN_PORT || 3003;
+  app.listen(PORT, () => {
+    logger.info(`Server running on port ${PORT}`);
+  });
+}
 
 // Export app for testing
 export default app;
