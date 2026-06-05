@@ -68,8 +68,8 @@ export function RecipeView({
 
       {/* Title + actions (visible) */}
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-extrabold tracking-tight">{recipe.title}</h1>
+        <div className="min-w-0">
+          <h1 className="text-2xl font-extrabold tracking-tight break-words sm:text-3xl">{recipe.title}</h1>
           <div className="mt-3 flex flex-wrap gap-2">
             {recipe.category && <Badge>{titleCase(recipe.category)}</Badge>}
             {recipe.tags?.slice(0, 4).map((t) => (

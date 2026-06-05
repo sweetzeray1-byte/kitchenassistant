@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
@@ -20,6 +20,15 @@ export const metadata: Metadata = {
   title: "Kitchen Assistant — AI Recipe Generation",
   description:
     "Generate beautiful, illustrated recipes with AI. Discover dishes, chat with your personal AI chef, and cook with confidence.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  // Let content extend into the notch / rounded-corner areas so we can use
+  // safe-area insets for the fixed chat FAB and chat composer.
+  viewportFit: "cover",
+  themeColor: "#af1c1c",
 };
 
 export default function RootLayout({

@@ -40,6 +40,24 @@ body {
   background: var(--color-background);
   color: var(--color-foreground);
   font-family: var(--font-sans);
+  /* Guard against any stray full-bleed element causing a horizontal scrollbar
+     on narrow phones. Vertical scrolling is unaffected. */
+  overflow-x: hidden;
+}
+
+/* Avoid iOS auto-zooming form fields (any input < 16px triggers it). Inputs use
+   text-sm on desktop; bump to 16px on small screens so focus never zooms. */
+@media (max-width: 640px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/* Respect the home-indicator / notch area for elements pinned to a screen edge. */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 /* Thin, subtle scrollbars */

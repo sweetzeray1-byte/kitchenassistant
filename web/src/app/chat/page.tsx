@@ -303,7 +303,7 @@ function ChatInner() {
         )}
       </div>
 
-      <form onSubmit={handleSubmit} className="border-t border-border py-3">
+      <form onSubmit={handleSubmit} className="border-t border-border pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
         <div className="flex gap-2">
           <input
             value={input}
