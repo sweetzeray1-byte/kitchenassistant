@@ -60,7 +60,7 @@ export function RecipeCard({ recipe }: { recipe: Recipe }) {
             <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
               <path strokeLinecap="round" strokeLinejoin="round" d="M16 11a4 4 0 1 0-8 0M3 20a7 7 0 0 1 18 0" />
             </svg>
-            {recipe.servings} servings
+            {recipe.servings}
           </span>
         </div>
       </div>

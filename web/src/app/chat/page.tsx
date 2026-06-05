@@ -173,16 +173,40 @@ function ChatInner() {
   }
 
   return (
-    <div className="mx-auto flex h-[calc(100vh-4rem)] w-full max-w-3xl flex-col px-4">
-      <div className="py-4 text-center">
-        <h1 className="text-xl font-bold">AI Chef</h1>
-        <p className="text-xs text-muted-foreground">
-          Chat, get ideas, and generate full recipes — all in one place
-        </p>
-      </div>
-
-      <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto pb-4">
-        {messages.map((m) => {
+    <div className="mx-auto flex h-[calc(100dvh-4rem)] w-full max-w-3xl flex-col px-4">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto">
+        {messages.length <= 1 && !generating && !sending ? (
+          // Empty state — centered welcome, no awkward gap.
+          <div className="flex h-full flex-col items-center justify-center px-2 text-center">
+            <div className="grid h-16 w-16 place-items-center rounded-2xl bg-brand-50 text-brand">
+              <svg viewBox="0 0 24 24" className="h-8 w-8" fill="currentColor" aria-hidden="true">
+                <path d="M7 21h10a1 1 0 0 0 1-1v-3H6v3a1 1 0 0 0 1 1Zm9.5-16A4.5 4.5 0 0 0 12 6a4.5 4.5 0 0 0-8.96.86A3.5 3.5 0 0 0 6 15h12a3.5 3.5 0 0 0 .96-6.86A4.49 4.49 0 0 0 16.5 5Z" />
+              </svg>
+            </div>
+            <h1 className="mt-5 text-2xl font-bold sm:text-3xl">What can I cook for you?</h1>
+            <p className="mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">
+              Tell me a craving, an ingredient, or a dish — I&apos;ll find something and
+              generate the full recipe.
+            </p>
+            {messages[0]?.suggestions && messages[0].suggestions.length > 0 && (
+              <div className="mt-6 flex flex-wrap justify-center gap-2">
+                {messages[0].suggestions.map((s, i) => (
+                  <button
+                    key={`${s}-${i}`}
+                    onClick={() => void send(s)}
+                    className="rounded-full border border-border bg-white px-4 py-2 text-sm font-medium text-foreground transition-colors hover:border-brand hover:text-brand"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-4 py-5">
+            {messages
+              .filter((m) => m.id !== "greeting")
+              .map((m) => {
           // A generated recipe committed into the conversation.
           if (m.kind === "recipe" && m.recipe) {
             return (
@@ -273,6 +297,8 @@ function ChatInner() {
               <Spinner className="h-4 w-4 text-brand" />
               Thinking…
             </div>
+          </div>
+        )}
           </div>
         )}
       </div>
