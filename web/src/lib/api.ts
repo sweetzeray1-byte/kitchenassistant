@@ -234,6 +234,24 @@ export const api = {
     return res.subscription;
   },
 
+  /** Start Stripe Checkout for a paid tier; returns the hosted checkout URL. */
+  async createCheckout(tier: "basic" | "premium") {
+    const res = await request<{ checkoutUrl: string }>(
+      "/api/subscriptions/checkout",
+      { method: "POST", body: { tier }, requireAuth: true },
+    );
+    return res.checkoutUrl;
+  },
+
+  /** Open the Stripe Billing Portal to manage/cancel an existing subscription. */
+  async billingPortal(returnUrl?: string) {
+    const res = await request<{ portalUrl: string }>(
+      "/api/subscriptions/portal",
+      { method: "POST", body: { returnUrl }, requireAuth: true },
+    );
+    return res.portalUrl;
+  },
+
   // ---------- Auth / profile ----------
   async me() {
     const res = await request<{ user: UserProfile }>("/api/auth/me", {

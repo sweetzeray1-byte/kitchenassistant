@@ -99,6 +99,14 @@ export const ANONYMOUS_AI_CHAT_REPLY_LIMIT = 10;
 export interface SubscriptionResponse {
   tier: SubscriptionTier;
   status: SubscriptionStatus;
+  /**
+   * Where the current paid plan is billed, so clients can route management
+   * correctly across platforms:
+   *  - 'stripe' → bought on the web; manage via the Stripe billing portal.
+   *  - 'app'    → bought via in-app purchase (RevenueCat); manage in the mobile app.
+   *  - null     → free tier / no active paid plan.
+   */
+  provider: 'stripe' | 'app' | null;
   currentPeriodEnd: string | null; // Already string | null, which is good
   cancelAtPeriodEnd: boolean;
   recipeGenerationsLimit: number;

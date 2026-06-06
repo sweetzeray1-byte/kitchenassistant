@@ -109,6 +109,8 @@ export type SubscriptionStatus =
 export interface SubscriptionInfo {
   tier: SubscriptionTier;
   status: SubscriptionStatus;
+  /** Where a paid plan is billed: 'stripe' (web), 'app' (in-app purchase), or null (free). */
+  provider?: "stripe" | "app" | null;
   currentPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
   recipeGenerationsLimit: number; // -1 = unlimited

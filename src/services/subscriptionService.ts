@@ -8,7 +8,13 @@ import {
   SUBSCRIPTION_FEATURE_LIMITS,
   SubscriptionResponse,
 } from '../models/Subscription';
-import { isStripeConfigured } from '../config/stripe';
+import Stripe from 'stripe';
+import {
+  isStripeConfigured,
+  stripe,
+  priceIdForTier,
+  tierForPriceId,
+} from '../config/stripe';
 
 export interface SubscriptionSyncParams {
   userId: string;
@@ -299,9 +305,20 @@ export const getSubscriptionStatus = async (userId: string): Promise<Subscriptio
 
     logger.info(`Service getSubscriptionStatus for ${userId}: Tier=${userTier}, Status=${subscription.status}, Recipes (U/L/R): ${recipeUsageCount}/${recipeLimit === Infinity ? 'Inf' : recipeLimit}/${recipeRemaining === -1 ? 'Inf' : recipeRemaining}, AI Chat (U/L/R): ${aiChatUsageCount}/${aiChatLimit === Infinity ? 'Inf' : aiChatLimit}/${aiChatRemaining === -1 ? 'Inf' : aiChatRemaining}`);
 
+    // Derive where a paid plan is billed so clients can route management correctly.
+    // A Stripe subscription id means it was bought on the web; a paid tier without
+    // one means it came through in-app purchase (RevenueCat).
+    const provider: 'stripe' | 'app' | null =
+      userTier === 'free'
+        ? null
+        : subscription.stripeSubscriptionId
+          ? 'stripe'
+          : 'app';
+
     return {
       tier: userTier,
       status: subscription.status,
+      provider,
       currentPeriodEnd: subscription.currentPeriodEnd ? subscription.currentPeriodEnd.toISOString() : null,
       cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
       recipeGenerationsLimit: recipeLimit === Infinity ? -1 : recipeLimit,
@@ -384,26 +401,272 @@ export const trackAiChatReplyGeneration = async (userId: string): Promise<boolea
 // ***** END IMPLEMENTATION OF trackAiChatReplyGeneration *****
 
 
-// --- Stripe specific functions (kept from your original, ensure they are relevant) ---
-export const getOrCreateStripeCustomer = async (userId: string): Promise<string | null> => { 
-    logger.warn(`getOrCreateStripeCustomer called for ${userId} - STUBBED`); 
-    return null; 
+// --- Stripe specific functions (web billing via direct Stripe integration) ---
+
+/** Translate a Stripe subscription status into our internal status enum. */
+const mapStripeStatus = (status: Stripe.Subscription.Status): ModelSubscriptionStatus => {
+  switch (status) {
+    case 'active': return 'active';
+    case 'trialing': return 'trialing';
+    case 'past_due': return 'past_due';
+    case 'unpaid': return 'past_due';
+    case 'incomplete': return 'incomplete';
+    case 'canceled':
+    case 'incomplete_expired':
+    case 'paused':
+    default:
+      return 'canceled';
+  }
 };
-export const createCheckoutSession = async (userId: string, priceTier: 'basic' | 'premium', successUrl: string, cancelUrl: string): Promise<string | null> => { 
-    logger.warn(`createCheckoutSession called for ${userId} - STUBBED`); 
-    return null; 
+
+/**
+ * Resolve our internal Supabase user_id for a Stripe subscription. We prefer the
+ * metadata we set at checkout, then fall back to matching the stored customer id,
+ * and finally the customer's own metadata.
+ */
+const resolveStripeUserId = async (
+  sub: Stripe.Subscription,
+  customerId?: string,
+): Promise<string | null> => {
+  const metaId = sub.metadata?.supabase_user_id;
+  if (metaId) return metaId;
+
+  if (customerId) {
+    const { data } = await supabase
+      .from('subscriptions')
+      .select('user_id')
+      .eq('stripe_customer_id', customerId)
+      .maybeSingle();
+    if (data?.user_id) return data.user_id;
+
+    if (stripe) {
+      try {
+        const customer = await stripe.customers.retrieve(customerId);
+        if (customer && !(customer as Stripe.DeletedCustomer).deleted) {
+          const id = (customer as Stripe.Customer).metadata?.supabase_user_id;
+          if (id) return id;
+        }
+      } catch (err) {
+        logger.warn(`resolveStripeUserId: could not retrieve customer ${customerId}:`, err);
+      }
+    }
+  }
+  return null;
 };
-export const createCustomerPortalSession = async (userId: string, returnUrl: string): Promise<string | null> => { 
-    logger.warn(`createCustomerPortalSession called for ${userId} - STUBBED`); 
-    return null; 
+
+/**
+ * Get (or lazily create) the Stripe customer for a user, persisting the customer
+ * id on the user's subscription row so the webhook can map events back to them.
+ */
+export const getOrCreateStripeCustomer = async (
+  userId: string,
+  email?: string,
+): Promise<string | null> => {
+  if (!stripe) {
+    logger.error('getOrCreateStripeCustomer: Stripe is not configured.');
+    return null;
+  }
+  try {
+    // getUserSubscription ensures a (free) subscription row exists for this user.
+    const existing = await getUserSubscription(userId);
+    if (existing?.stripeCustomerId) return existing.stripeCustomerId;
+
+    const customer = await stripe.customers.create({
+      email: email || undefined,
+      metadata: { supabase_user_id: userId },
+    });
+
+    const { error } = await supabase
+      .from('subscriptions')
+      .update({ stripe_customer_id: customer.id, updated_at: new Date().toISOString() })
+      .eq('user_id', userId);
+    if (error) {
+      logger.error(`getOrCreateStripeCustomer: failed to persist customer id for ${userId}:`, error);
+    }
+    return customer.id;
+  } catch (error) {
+    logger.error(`getOrCreateStripeCustomer: unexpected error for ${userId}:`, error);
+    return null;
+  }
 };
-export const cancelSubscription = async (userId: string): Promise<boolean> => { 
-    logger.warn(`cancelSubscription called for ${userId} - STUBBED`); 
-    return false; 
+
+/** Create a Stripe Checkout Session for a paid tier and return its hosted URL. */
+export const createCheckoutSession = async (
+  userId: string,
+  email: string | undefined,
+  priceTier: 'basic' | 'premium',
+  successUrl: string,
+  cancelUrl: string,
+): Promise<string | null> => {
+  if (!stripe) {
+    logger.error('createCheckoutSession: Stripe is not configured.');
+    return null;
+  }
+  const price = priceIdForTier(priceTier);
+  if (!price) {
+    logger.error(`createCheckoutSession: no Stripe price configured for tier "${priceTier}".`);
+    return null;
+  }
+  try {
+    const customerId = await getOrCreateStripeCustomer(userId, email);
+    if (!customerId) return null;
+
+    const session = await stripe.checkout.sessions.create({
+      mode: 'subscription',
+      customer: customerId,
+      line_items: [{ price, quantity: 1 }],
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+      client_reference_id: userId,
+      allow_promotion_codes: true,
+      subscription_data: {
+        metadata: { supabase_user_id: userId, tier: priceTier },
+      },
+    });
+    return session.url;
+  } catch (error) {
+    logger.error(`createCheckoutSession: unexpected error for ${userId}:`, error);
+    return null;
+  }
 };
-export const updateSubscriptionFromStripe = async (stripeSubscriptionId: string, status: ModelSubscriptionStatus, currentPeriodStart: Date, currentPeriodEnd: Date, cancelAtPeriodEnd: boolean, tier: ModelSubscriptionTier): Promise<boolean> => { 
-    logger.warn(`updateSubscriptionFromStripe called for ${stripeSubscriptionId} - STUBBED`); 
+
+/** Create a Stripe Billing Portal session so the user can manage/cancel their plan. */
+export const createCustomerPortalSession = async (
+  userId: string,
+  returnUrl: string,
+): Promise<string | null> => {
+  if (!stripe) {
+    logger.error('createCustomerPortalSession: Stripe is not configured.');
+    return null;
+  }
+  try {
+    const existing = await getUserSubscription(userId);
+    const customerId = existing?.stripeCustomerId;
+    if (!customerId) {
+      logger.warn(`createCustomerPortalSession: user ${userId} has no Stripe customer id.`);
+      return null;
+    }
+    const session = await stripe.billingPortal.sessions.create({
+      customer: customerId,
+      return_url: returnUrl,
+    });
+    return session.url;
+  } catch (error) {
+    logger.error(`createCustomerPortalSession: unexpected error for ${userId}:`, error);
+    return null;
+  }
+};
+
+/** Flag the user's Stripe subscription to cancel at the end of the current period. */
+export const cancelSubscription = async (userId: string): Promise<boolean> => {
+  if (!stripe) {
+    logger.error('cancelSubscription: Stripe is not configured.');
     return false;
+  }
+  try {
+    const existing = await getUserSubscription(userId);
+    if (!existing?.stripeSubscriptionId) {
+      logger.warn(`cancelSubscription: user ${userId} has no Stripe subscription id.`);
+      return false;
+    }
+    await stripe.subscriptions.update(existing.stripeSubscriptionId, {
+      cancel_at_period_end: true,
+    });
+    // Reflect immediately; the webhook will confirm.
+    await supabase
+      .from('subscriptions')
+      .update({ cancel_at_period_end: true, updated_at: new Date().toISOString() })
+      .eq('user_id', userId);
+    return true;
+  } catch (error) {
+    logger.error(`cancelSubscription: unexpected error for ${userId}:`, error);
+    return false;
+  }
+};
+
+/**
+ * Write the state of a Stripe subscription into our shared `subscriptions` table
+ * — the single source of truth read by both the web and the mobile app. Mirrors
+ * the RevenueCat webhook: resets usage on a new billing period and unlocks the
+ * user's teased recipes once they are on a paid, active tier.
+ */
+export const syncStripeSubscription = async (
+  sub: Stripe.Subscription,
+  opts: { downgradeToFree?: boolean } = {},
+): Promise<boolean> => {
+  try {
+    const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer?.id;
+    const userId = await resolveStripeUserId(sub, customerId);
+    if (!userId) {
+      logger.error(`syncStripeSubscription: could not resolve user for subscription ${sub.id}.`);
+      return false;
+    }
+
+    const priceId = sub.items?.data?.[0]?.price?.id;
+    const derivedTier = tierForPriceId(priceId) || 'free';
+    const tier: ModelSubscriptionTier = opts.downgradeToFree ? 'free' : derivedTier;
+    const status: ModelSubscriptionStatus = opts.downgradeToFree
+      ? 'canceled'
+      : mapStripeStatus(sub.status);
+
+    const periodStart = sub.current_period_start ? new Date(sub.current_period_start * 1000) : null;
+    const periodEnd = sub.current_period_end ? new Date(sub.current_period_end * 1000) : null;
+    const cancelAtPeriodEnd = !!sub.cancel_at_period_end;
+
+    const existing = await getUserSubscription(userId);
+
+    const { error } = await supabase
+      .from('subscriptions')
+      .upsert(
+        {
+          user_id: userId,
+          tier,
+          status,
+          current_period_start: periodStart ? periodStart.toISOString() : null,
+          current_period_end: periodEnd ? periodEnd.toISOString() : null,
+          cancel_at_period_end: cancelAtPeriodEnd,
+          stripe_customer_id: customerId || existing?.stripeCustomerId || null,
+          stripe_subscription_id: sub.id,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id' },
+      )
+      .select()
+      .single();
+
+    if (error) {
+      logger.error(`syncStripeSubscription: failed to upsert subscription for ${userId}:`, error);
+      return false;
+    }
+
+    logger.info(`syncStripeSubscription: user ${userId} synced to tier "${tier}", status "${status}" (sub ${sub.id}).`);
+
+    // Reset usage counters only when the billing period actually advanced.
+    const periodChanged =
+      !!periodStart &&
+      (!existing?.currentPeriodStart ||
+        existing.currentPeriodStart.getTime() !== periodStart.getTime());
+    if (periodChanged && periodStart && periodEnd) {
+      await resetUsageCounter(userId, periodStart, periodEnd);
+    }
+
+    // Tease & lock: unlock everything the user previously teased once they're paid + active.
+    if (tier !== 'free' && status === 'active') {
+      const { error: unlockError } = await supabase
+        .from('recipes')
+        .update({ is_locked: false })
+        .eq('user_id', userId)
+        .eq('is_locked', true);
+      if (unlockError) {
+        logger.error(`syncStripeSubscription: failed to mass-unlock recipes for ${userId}:`, unlockError);
+      }
+    }
+
+    return true;
+  } catch (error) {
+    logger.error(`syncStripeSubscription: unexpected error for subscription ${sub.id}:`, error);
+    return false;
+  }
 };
 export const trackRecipeGeneration = async (userId: string): Promise<boolean> => { 
     logger.warn(`trackRecipeGeneration called for ${userId} - STUBBED (should ideally interact with recipe_usage table)`); 

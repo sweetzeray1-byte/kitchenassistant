@@ -166,28 +166,47 @@ export const subscriptionSyncController = async (
   }
 };
 
-// --- Other Controller Functions (Stripe related - kept as per your original structure) ---
+// --- Stripe web-billing controllers ---
+
+/** Base URL of the web app, used to build Checkout/Portal return URLs. */
+const WEB_BASE_URL = (process.env.WEB_URL || process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
+
 export const createCheckoutSessionController = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    // ... (Your existing logic, ensuring it maps planIdentifier to 'basic'/'premium' if calling the old Stripe service)
-    logger.warn("Stripe createCheckoutSessionController called - verify if used/needed as RevenueCat is primary for mobile.");
     if (!isStripeConfigured()) return next(new AppError('Payment system (Stripe) is not configured', 503));
     const userId = req.user?.id;
+    const email = req.user?.email as string | undefined;
     if (!userId) return next(new AppError('Authentication required', 401));
-    const { planIdentifier, successUrl, cancelUrl } = req.body;
-    if (!planIdentifier || !successUrl || !cancelUrl) return next(new AppError('planIdentifier (Stripe Price ID), successUrl, and cancelUrl are required', 400));
 
-    let tierForStripe: 'basic' | 'premium';
-    if (planIdentifier === process.env.STRIPE_PRICE_ID_BASIC_YOUR_APP) { // EXAMPLE
-        tierForStripe = 'basic';
-    } else if (planIdentifier === process.env.STRIPE_PRICE_ID_PREMIUM_YOUR_APP) { // EXAMPLE
-        tierForStripe = 'premium';
-    } else {
-        logger.warn(`createCheckoutSessionController: Invalid planIdentifier '${planIdentifier}' for Stripe by user ${userId}.`);
-        return next(new AppError('Invalid planIdentifier for Stripe checkout. Unknown Price ID.', 400));
+    // Accept the tier directly from the web client; fall back to mapping a raw Price ID.
+    const { tier, successUrl, cancelUrl } = req.body as {
+      tier?: string;
+      successUrl?: string;
+      cancelUrl?: string;
+    };
+
+    if (tier !== 'basic' && tier !== 'premium') {
+        return next(new AppError("A valid 'tier' ('basic' or 'premium') is required.", 400));
     }
+
+    // Guard against double-subscribing across platforms. If the user already holds an
+    // active/trialing paid plan, a fresh Checkout would create a SECOND subscription
+    // (and, if the first was an in-app purchase, bill them twice on two stores).
+    const current = await getSubscriptionStatus(userId);
+    if (current && current.tier !== 'free' && (current.status === 'active' || current.status === 'trialing')) {
+        if (current.provider === 'app') {
+            logger.info(`createCheckoutSession blocked for ${userId}: active in-app (RevenueCat) subscription.`);
+            return next(new AppError('You already have an active subscription through the mobile app. Manage it in the app.', 409));
+        }
+        logger.info(`createCheckoutSession blocked for ${userId}: active Stripe subscription.`);
+        return next(new AppError('You already have an active subscription. Use “Manage subscription” to change your plan.', 409));
+    }
+
+    const success = successUrl || `${WEB_BASE_URL}/pricing?checkout=success`;
+    const cancel = cancelUrl || `${WEB_BASE_URL}/pricing?checkout=cancelled`;
+
     try {
-        const checkoutUrl = await createCheckoutSession(userId, tierForStripe, successUrl, cancelUrl);
-        if (!checkoutUrl) return next(new AppError('Failed to create Stripe checkout session via service', 500));
+        const checkoutUrl = await createCheckoutSession(userId, email, tier, success, cancel);
+        if (!checkoutUrl) return next(new AppError('Failed to create Stripe checkout session', 500));
         res.status(200).json({ checkoutUrl });
     } catch (error) {
         logger.error('Error creating Stripe checkout session:', error);
@@ -196,15 +215,14 @@ export const createCheckoutSessionController = async (req: Request, res: Respons
 };
 
 export const createCustomerPortalSessionController = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    logger.warn("Stripe createCustomerPortalSessionController called - verify if used/needed.");
     if (!isStripeConfigured()) return next(new AppError('Payment system (Stripe) is not configured', 503));
     const userId = req.user?.id;
     if (!userId) return next(new AppError('Authentication required', 401));
-    const { returnUrl } = req.body;
-    if (!returnUrl) return next(new AppError('Return URL is required', 400));
+    const { returnUrl } = req.body as { returnUrl?: string };
+    const ret = returnUrl || `${WEB_BASE_URL}/profile`;
     try {
-        const portalUrl = await createCustomerPortalSession(userId, returnUrl);
-        if (!portalUrl) return next(new AppError('Failed to create Stripe customer portal session via service', 500));
+        const portalUrl = await createCustomerPortalSession(userId, ret);
+        if (!portalUrl) return next(new AppError('No active billing account found to manage.', 400));
         res.status(200).json({ portalUrl });
     } catch (error) {
         logger.error('Error creating Stripe customer portal session:', error);

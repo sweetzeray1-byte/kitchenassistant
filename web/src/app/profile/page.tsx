@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth-context";
 import { useRequireAuth } from "@/lib/use-require-auth";
@@ -153,19 +153,37 @@ function SubscriptionSummary() {
     queryFn: () => api.subscriptionStatus(),
   });
 
+  const [portalLoading, setPortalLoading] = useState(false);
+  const [portalError, setPortalError] = useState<string | null>(null);
+
+  const openPortal = async () => {
+    setPortalError(null);
+    setPortalLoading(true);
+    try {
+      const url = await api.billingPortal(`${window.location.origin}/profile`);
+      window.location.href = url;
+    } catch (err) {
+      setPortalError(
+        err instanceof ApiError ? err.message : "Could not open the billing portal.",
+      );
+      setPortalLoading(false);
+    }
+  };
+
+  const isPaid = data ? data.tier !== "free" : false;
+  const isStripe = data?.provider === "stripe";
+  const isApp = data?.provider === "app";
+
   return (
     <Card className="p-5">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold">Plan</h2>
-        <LinkButton href="/pricing" variant="ghost" size="sm">
-          Manage
-        </LinkButton>
+        {data && <Badge>{titleCase(data.tier)}</Badge>}
       </div>
       {isLoading ? (
         <div className="mt-3 h-5 w-24 rounded bg-muted" />
       ) : data ? (
         <div className="mt-3 space-y-3">
-          <Badge>{titleCase(data.tier)}</Badge>
           <UsageRow
             label="Recipe generations"
             used={data.recipeGenerationsUsed}
@@ -178,6 +196,39 @@ function SubscriptionSummary() {
             remaining={data.aiChatRepliesRemaining}
             limit={data.aiChatRepliesLimit}
           />
+
+          {isPaid && data.currentPeriodEnd && (
+            <p className="text-xs text-muted-foreground">
+              {data.cancelAtPeriodEnd ? "Cancels on " : "Renews on "}
+              {new Date(data.currentPeriodEnd).toLocaleDateString()}
+            </p>
+          )}
+
+          {portalError && <ErrorBanner message={portalError} />}
+
+          {/* Contextual action: manage via the same channel the plan was bought on. */}
+          {!isPaid ? (
+            <LinkButton href="/pricing" fullWidth>
+              Upgrade plan
+            </LinkButton>
+          ) : isStripe ? (
+            <Button
+              variant="outline"
+              fullWidth
+              loading={portalLoading}
+              onClick={openPortal}
+            >
+              Manage subscription
+            </Button>
+          ) : isApp ? (
+            <p className="rounded-xl border border-border bg-muted/40 px-3 py-2.5 text-center text-xs text-muted-foreground">
+              Subscribed via the mobile app — manage or cancel in the Kitchen Assistant app.
+            </p>
+          ) : (
+            <LinkButton href="/pricing" variant="outline" fullWidth>
+              View plans
+            </LinkButton>
+          )}
         </div>
       ) : (
         <p className="mt-3 text-sm text-muted-foreground">Unable to load plan.</p>
@@ -230,10 +281,13 @@ function PreferencesEditor({
 
   useEffect(() => {
     if (initial) {
+      // Seed the form once the user's saved preferences load in.
+      /* eslint-disable react-hooks/set-state-in-effect -- syncing async-loaded initial values into editable form state */
       setDietary((initial.dietaryRestrictions ?? []).join(", "));
       setAllergies((initial.allergies ?? []).join(", "));
       setCuisines((initial.favoriteCuisines ?? []).join(", "));
       setSkill(initial.cookingSkill ?? "beginner");
+      /* eslint-enable react-hooks/set-state-in-effect */
     }
   }, [initial]);
 

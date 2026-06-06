@@ -15,6 +15,7 @@ import authRoutes from './routes/authRoutes';
 import userRoutes from './routes/userRoutes';
 import subscriptionRoutes from './routes/subscriptionRoutes';
 import webhookRoutes from './routes/webhookRoutes';
+import { handleStripeWebhook } from './controllers/stripeWebhookController';
 import { recipeQueue } from './queues/recipeQueue';
 import { chatQueue } from './queues/chatQueue';
 import { imageQueue } from './queues/imageQueue';
@@ -58,6 +59,14 @@ if (process.env.NODE_ENV === 'production') {
 } else {
   app.use('/admin/queues', serverAdapter.getRouter());
 }
+
+// Stripe webhook — MUST be registered before express.json() so the handler
+// receives the raw request body required for signature verification.
+app.post(
+  '/api/webhooks/stripe',
+  express.raw({ type: 'application/json' }),
+  handleStripeWebhook,
+);
 
 // Regular middleware
 app.use(express.json({ limit: '1mb' })); // Limit request size
