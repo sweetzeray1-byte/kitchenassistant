@@ -25,6 +25,7 @@ export interface NutritionInfo {
 export interface Recipe {
   id?: string; // Optional: Added by DB or pre-generated
   title: string;
+  description?: string; // Appetizing 2-4 sentence intro/headnote (English, for UX + SEO)
   servings: number;
   ingredients: string[];
   steps: RecipeStep[];
@@ -143,6 +144,7 @@ export const createRecipe = (recipeData: Partial<Recipe>): Recipe => {
   return {
       id: recipeData.id, // Might be undefined until saved or pre-generated
       title: recipeData.title || 'Untitled Recipe',
+      description: recipeData.description,
       servings: recipeData.servings || 4,
       ingredients: recipeData.ingredients || [],
       steps: recipeData.steps || [],

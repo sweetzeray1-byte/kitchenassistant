@@ -234,11 +234,11 @@ export const api = {
     return res.subscription;
   },
 
-  /** Start Stripe Checkout for a paid tier; returns the hosted checkout URL. */
-  async createCheckout(tier: "basic" | "premium") {
+  /** Start Stripe Checkout for a Pro billing interval; returns the hosted checkout URL. */
+  async createCheckout(plan: "weekly" | "monthly" | "annual") {
     const res = await request<{ checkoutUrl: string }>(
       "/api/subscriptions/checkout",
-      { method: "POST", body: { tier }, requireAuth: true },
+      { method: "POST", body: { plan }, requireAuth: true },
     );
     return res.checkoutUrl;
   },

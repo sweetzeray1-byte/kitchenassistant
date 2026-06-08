@@ -1,10 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import type { Recipe } from "@/lib/types";
 import { formatMinutes, titleCase } from "@/lib/utils";
 
-export function RecipeCard({ recipe }: { recipe: Recipe }) {
+// `eager` marks above-the-fold cards (e.g. the first few of the popular rail) so their
+// images load immediately instead of lazily — improves the time-to-visible on landing.
+export function RecipeCard({ recipe, eager = false }: { recipe: Recipe; eager?: boolean }) {
   const time = formatMinutes(recipe.totalTime ?? recipe.cookTime ?? recipe.prepTime);
   const img = recipe.thumbnail_url || recipe.steps?.find((s) => s.image_url)?.image_url;
 
@@ -15,12 +18,16 @@ export function RecipeCard({ recipe }: { recipe: Recipe }) {
     >
       <div className="relative aspect-[4/3] w-full overflow-hidden bg-muted">
         {img ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <Image
             src={img}
             alt={recipe.title}
-            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-            loading="lazy"
+            fill
+            // Cards render at ~160px (mobile) / ~192px (sm+); request a matching size so
+            // Vercel serves a tiny WebP/AVIF instead of the full-resolution source PNG.
+            sizes="(min-width: 640px) 192px, 160px"
+            className="object-cover transition-transform duration-300 group-hover:scale-105"
+            loading={eager ? "eager" : "lazy"}
+            fetchPriority={eager ? "high" : "auto"}
           />
         ) : (
           <div className="grid h-full w-full place-items-center text-brand-200">

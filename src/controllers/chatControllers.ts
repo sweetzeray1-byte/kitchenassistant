@@ -153,7 +153,7 @@ export const handleChatMessage = async (req: Request, res: Response, next: NextF
                 user_id: null,
                 role: 'assistant',
                 content: result.reply,
-                metadata: { suggestions: result.suggestions ?? [], intent_meta: result.intent_meta ?? null },
+                metadata: { suggestions: result.suggestions ?? [], intent_meta: result.intent_meta ?? null, interpreted_as: result.interpreted_as ?? null },
               };
               await supabase.from('messages').insert(assistantMessagePayload);
               await supabase
@@ -173,6 +173,7 @@ export const handleChatMessage = async (req: Request, res: Response, next: NextF
             reply: result.reply,
             suggestions: result.suggestions, // suggestions now defaults to [] in the schema
             intent_meta: result.intent_meta ?? null, // Concierge intent data for the RecipeIntentCard
+            interpreted_as: result.interpreted_as ?? null, // Normalized English dish term for "Did you mean…?" + recipe generation
           });
 
         } else { 

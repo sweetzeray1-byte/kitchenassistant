@@ -85,7 +85,10 @@ async function cleanupPartialRecipeCache(requestId: string): Promise<void> {
  * Uses the queuing system.
  */
 export const generateRecipe = async (req: Request, res: Response, next: NextFunction) => {
-  const { query, save = false } = req.body;
+  // `interpreted_as` (optional) is the chat AI's canonical English normalization of the
+  // user's request — sent by the client when a recipe is generated from a chat suggestion
+  // so misspelled/regional/non-English requests still generate the right dish.
+  const { query, save = false, interpreted_as = null } = req.body;
   const requestId = uuidv4();
   // Check if queue system is active (determined by existence of recipe queue)
   const useQueueSystem = !!recipeQueue; // Check if the imported queue exists
@@ -122,6 +125,7 @@ export const generateRecipe = async (req: Request, res: Response, next: NextFunc
         'generate-recipe', // Job name
         { // Job data
           query,
+          interpretedAs: interpreted_as,
           userPreferences: userPreferences,
           requestId,
           userId: userId, // Pass potentially undefined userId
@@ -162,7 +166,7 @@ export const generateRecipe = async (req: Request, res: Response, next: NextFunc
  * Kept for backward compatibility and fallback
  */
 const generateRecipeOriginal = async (req: Request, res: Response, next: NextFunction) => {
-  const { query, save } = req.body;
+  const { query, save, interpreted_as = null } = req.body;
   const recipeId = uuidv4();
   const requestId = uuidv4();
   logger.info(`Generated unique ID for recipe: ${recipeId}, request ID: ${requestId} (Sync Flow)`);
@@ -178,7 +182,7 @@ const generateRecipeOriginal = async (req: Request, res: Response, next: NextFun
   try {
     // Step 1: Generate recipe content JSON string
     logger.info(`Starting GPT recipe generation for request: ${requestId} (Sync Flow)`);
-    const gptJsonResponse = await generateRecipeContent(query, userPreferences);
+    const gptJsonResponse = await generateRecipeContent(query, userPreferences, interpreted_as);
     if (isRequestCancelled(requestId)) { throw new AppError('Recipe generation cancelled', 499); }
     logger.info("Received potential JSON response string from GPT service (Sync Flow).");
 
@@ -209,6 +213,7 @@ const generateRecipeOriginal = async (req: Request, res: Response, next: NextFun
     const initialRecipe: Recipe = {
       id: recipeId,
       title: parsedRecipeData.title ?? 'Untitled Recipe',
+      description: typeof parsedRecipeData.description === 'string' ? parsedRecipeData.description.trim() : undefined,
       servings: parsedRecipeData.servings ?? 4,
       ingredients: parsedRecipeData.ingredients ?? [],
       steps: parsedRecipeData.steps ?? [],

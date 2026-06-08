@@ -1372,6 +1372,7 @@ export type Database = {
           category: string | null
           cook_time_minutes: number | null
           created_at: string | null
+          description: string | null
           id: string
           ingredients: string[]
           is_locked: boolean
@@ -1394,6 +1395,7 @@ export type Database = {
           category?: string | null
           cook_time_minutes?: number | null
           created_at?: string | null
+          description?: string | null
           id?: string
           ingredients: string[]
           is_locked?: boolean
@@ -1416,6 +1418,7 @@ export type Database = {
           category?: string | null
           cook_time_minutes?: number | null
           created_at?: string | null
+          description?: string | null
           id?: string
           ingredients?: string[]
           is_locked?: boolean

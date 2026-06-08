@@ -16,11 +16,14 @@ export function RecipeRail({
   href,
   recipes,
   loading,
+  eagerFirst = false,
 }: {
   title: string;
   href: string;
   recipes?: Recipe[];
   loading?: boolean;
+  // When true, the first few cards load their images eagerly (above-the-fold rail).
+  eagerFirst?: boolean;
 }) {
   if (!loading && (!recipes || recipes.length === 0)) return null;
 
@@ -40,7 +43,11 @@ export function RecipeRail({
       <div className="-mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {(loading ? Array.from({ length: 6 }) : recipes!).map((item, i) => (
           <div key={(item as Recipe)?.id ?? i} className="w-40 flex-shrink-0 snap-start sm:w-48">
-            {loading ? <RecipeCardSkeleton /> : <RecipeCard recipe={item as Recipe} />}
+            {loading ? (
+              <RecipeCardSkeleton />
+            ) : (
+              <RecipeCard recipe={item as Recipe} eager={eagerFirst && i < 4} />
+            )}
           </div>
         ))}
       </div>

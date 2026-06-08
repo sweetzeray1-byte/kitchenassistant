@@ -20,6 +20,7 @@ interface AuthContextValue {
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, name: string) => Promise<{ needsConfirmation: boolean }>;
+  signInWithGoogle: (next?: string) => Promise<void>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -101,6 +102,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
+  const signInWithGoogle = useCallback(async (next: string = "/chat") => {
+    const redirectTo =
+      typeof window !== "undefined"
+        ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`
+        : undefined;
+    // Redirects to Google; on return, /auth/callback finishes the PKCE exchange
+    // (detectSessionInUrl) and routes the user onward.
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo },
+    });
+    if (error) throw new Error(error.message);
+  }, []);
+
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
     setProfile(null);
@@ -125,11 +140,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       loading,
       signIn,
       signUp,
+      signInWithGoogle,
       signOut,
       resetPassword,
       refreshProfile,
     }),
-    [session, profile, loading, signIn, signUp, signOut, resetPassword, refreshProfile],
+    [session, profile, loading, signIn, signUp, signInWithGoogle, signOut, resetPassword, refreshProfile],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

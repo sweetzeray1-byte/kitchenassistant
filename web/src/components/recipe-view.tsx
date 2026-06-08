@@ -70,6 +70,11 @@ export function RecipeView({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <h1 className="text-2xl font-extrabold tracking-tight break-words sm:text-3xl">{recipe.title}</h1>
+          {recipe.description && recipe.description.trim() && (
+            <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-muted-foreground">
+              {recipe.description.trim()}
+            </p>
+          )}
           <div className="mt-3 flex flex-wrap gap-2">
             {recipe.category && <Badge>{titleCase(recipe.category)}</Badge>}
             {recipe.tags?.slice(0, 4).map((t) => (

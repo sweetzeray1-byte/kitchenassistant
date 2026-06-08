@@ -87,6 +87,7 @@ export const saveRecipe = async (recipe: Recipe, userId: string | null): Promise
             // This assignment already correctly handles passing null to Supabase
             user_id: userId,
             title: recipe.title,
+            description: recipe.description ?? null,
             servings: recipe.servings,
             ingredients: recipe.ingredients,
             steps: recipe.steps as unknown as Json,
@@ -234,6 +235,7 @@ export const getUserRecipes = async (userId: string): Promise<Recipe[]> => {
       tags: item.tags as string[] | undefined,
       views: item.views ?? 0,
       quality_score: item.quality_score ?? undefined,
+      description: item.description ?? undefined,
       thumbnail_url: item.thumbnail_url ?? undefined, // Include thumbnail_url
       isLocked: item.is_locked ?? false, // Tease & Lock state
       similarity_hash: item.similarity_hash ?? undefined, // Keep other fields
@@ -285,6 +287,7 @@ export const getRecipeById = async (recipeId: string): Promise<Recipe | null> =>
       views: data.views ?? 0, // Return updated view count (or original if update failed)
       quality_score: data.quality_score ?? undefined,
       similarity_hash: data.similarity_hash ?? undefined,
+      description: data.description ?? undefined,
       thumbnail_url: data.thumbnail_url ?? undefined, // Include thumbnail_url
       isLocked: data.is_locked ?? false, // Tease & Lock state
     };
@@ -318,6 +321,7 @@ export const getDiscoverRecipes = async ({ category, tags, sort = 'recent', limi
       query: item.query ?? '', createdAt: new Date(item.created_at ?? Date.now()),
       prepTime: item.prep_time_minutes ?? undefined, cookTime: item.cook_time_minutes ?? undefined, totalTime: item.total_time_minutes ?? undefined,
       category: item.category ?? undefined, tags: item.tags as string[] | undefined, views: item.views ?? 0, quality_score: item.quality_score ?? undefined,
+      description: item.description ?? undefined,
       thumbnail_url: item.thumbnail_url ?? undefined, // Include thumbnail_url
       isLocked: item.is_locked ?? false, // Tease & Lock state
     }));
@@ -344,6 +348,7 @@ export const getPopularRecipes = async (limit: number = 10): Promise<Recipe[]> =
       query: item.query ?? '', createdAt: new Date(item.created_at ?? Date.now()),
       prepTime: item.prep_time_minutes ?? undefined, cookTime: item.cook_time_minutes ?? undefined, totalTime: item.total_time_minutes ?? undefined,
       category: item.category ?? undefined, tags: item.tags as string[] | undefined, views: item.views ?? 0, quality_score: item.quality_score ?? undefined,
+      description: item.description ?? undefined,
       thumbnail_url: item.thumbnail_url ?? undefined, // Include thumbnail_url
       isLocked: item.is_locked ?? false, // Tease & Lock state
     }));
@@ -374,6 +379,7 @@ export const getCategoryRecipes = async (categoryId: string, { limit = 20, offse
       query: item.query ?? '', createdAt: new Date(item.created_at ?? Date.now()),
       prepTime: item.prep_time_minutes ?? undefined, cookTime: item.cook_time_minutes ?? undefined, totalTime: item.total_time_minutes ?? undefined,
       category: item.category ?? undefined, tags: item.tags as string[] | undefined, views: item.views ?? 0, quality_score: item.quality_score ?? undefined,
+      description: item.description ?? undefined,
       thumbnail_url: item.thumbnail_url ?? undefined, // Include thumbnail_url
       isLocked: item.is_locked ?? false, // Tease & Lock state
     }));
@@ -528,7 +534,8 @@ export const getFavoriteRecipes = async (userId: string): Promise<Recipe[]> => {
         prepTime: item.prep_time_minutes ?? undefined, cookTime: item.cook_time_minutes ?? undefined, totalTime: item.total_time_minutes ?? undefined,
         isFavorite: true, // Set flag as true because these were fetched via favorites table
         category: item.category ?? undefined, tags: item.tags as string[] | undefined, views: item.views ?? 0, quality_score: item.quality_score ?? undefined,
-        thumbnail_url: item.thumbnail_url ?? undefined, // Include thumbnail_url
+        description: item.description ?? undefined,
+      thumbnail_url: item.thumbnail_url ?? undefined, // Include thumbnail_url
       isLocked: item.is_locked ?? false, // Tease & Lock state
         similarity_hash: item.similarity_hash ?? undefined, // Keep other fields
     }));

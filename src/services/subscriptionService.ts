@@ -12,8 +12,9 @@ import Stripe from 'stripe';
 import {
   isStripeConfigured,
   stripe,
-  priceIdForTier,
+  priceIdForPlan,
   tierForPriceId,
+  ProPlan,
 } from '../config/stripe';
 
 export interface SubscriptionSyncParams {
@@ -490,11 +491,11 @@ export const getOrCreateStripeCustomer = async (
   }
 };
 
-/** Create a Stripe Checkout Session for a paid tier and return its hosted URL. */
+/** Create a Stripe Checkout Session for a Pro plan interval and return its hosted URL. */
 export const createCheckoutSession = async (
   userId: string,
   email: string | undefined,
-  priceTier: 'basic' | 'premium',
+  plan: ProPlan,
   successUrl: string,
   cancelUrl: string,
 ): Promise<string | null> => {
@@ -502,9 +503,9 @@ export const createCheckoutSession = async (
     logger.error('createCheckoutSession: Stripe is not configured.');
     return null;
   }
-  const price = priceIdForTier(priceTier);
+  const price = priceIdForPlan(plan);
   if (!price) {
-    logger.error(`createCheckoutSession: no Stripe price configured for tier "${priceTier}".`);
+    logger.error(`createCheckoutSession: no Stripe price configured for Pro plan "${plan}".`);
     return null;
   }
   try {
@@ -520,7 +521,8 @@ export const createCheckoutSession = async (
       client_reference_id: userId,
       allow_promotion_codes: true,
       subscription_data: {
-        metadata: { supabase_user_id: userId, tier: priceTier },
+        // All Pro intervals grant the premium tier; `plan` records which cadence.
+        metadata: { supabase_user_id: userId, tier: 'premium', plan },
       },
     });
     return session.url;

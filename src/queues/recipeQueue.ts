@@ -17,6 +17,7 @@ import { saveRecipe } from '../services/supabaseService';
 // Interface for recipe job data (no changes needed)
 export interface RecipeJobData {
     query: string;
+    interpretedAs?: string | null; // Canonical English normalization of the query from the chat AI
     userPreferences?: any;
     requestId: string;
     userId?: string; // Make userId optional as it might not always be present
@@ -63,7 +64,7 @@ export const imageQueueEvents = new QueueEvents('image-generation', { // Must ma
 // Define the processor function separately
 const processRecipeJob = async (job: Job<RecipeJobData, RecipeJobResult, 'generate-recipe'>): Promise<RecipeJobResult> => {
     logger.info(`[Worker] Recipe Processor function ENTERED for job: ${job.id}`);
-    const { query, userPreferences, requestId, userId, enableProgressiveDisplay, subscriptionTier, isLocked = false } = job.data;
+    const { query, interpretedAs, userPreferences, requestId, userId, enableProgressiveDisplay, subscriptionTier, isLocked = false } = job.data;
     const globalRecipeId = uuidv4();
 
     try {
@@ -77,7 +78,7 @@ const processRecipeJob = async (job: Job<RecipeJobData, RecipeJobResult, 'genera
         // Step 1: Generate content
         logger.info(`[Job ${job.id}] Generating content...`);
         await job.updateProgress(10);
-        const recipeContent = await generateRecipeContent(query, userPreferences);
+        const recipeContent = await generateRecipeContent(query, userPreferences, interpretedAs);
         await job.updateProgress(30);
 
         // Cancel check
@@ -95,6 +96,7 @@ const processRecipeJob = async (job: Job<RecipeJobData, RecipeJobResult, 'genera
         const initialRecipe: Recipe = {
             id: globalRecipeId, // Use the generated GLOBAL UUID
             title: parsedRecipeData.title ?? 'Untitled Recipe',
+            description: typeof parsedRecipeData.description === 'string' ? parsedRecipeData.description.trim() : undefined,
             servings: parsedRecipeData.servings ?? 4,
             ingredients: parsedRecipeData.ingredients ?? [],
             steps: (Array.isArray(parsedRecipeData.steps) ? parsedRecipeData.steps : []).map((step: any): RecipeStep => ({

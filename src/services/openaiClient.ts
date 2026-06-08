@@ -58,4 +58,7 @@ export { OpenAI };
 
 // Export common configurations
 export const GPT_MODEL = process.env.GPT_MODEL || 'gpt-4o-mini';
+// Stronger model used as an escalation tier for chat retries — better at the long tail
+// of regional/cultural dish names and low-resource languages than the mini default.
+export const GPT_MODEL_HIGH = process.env.GPT_MODEL_HIGH || 'gpt-4o';
 export const DALLE_MODEL = process.env.DALLE_MODEL || 'gpt-image-1';

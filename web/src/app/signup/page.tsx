@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AuthShell } from "@/components/auth-shell";
 import { Button, Input, ErrorBanner } from "@/components/ui";
+import { GoogleButton } from "@/components/google-button";
 import { useAuth } from "@/lib/auth-context";
 
 export default function SignupPage() {
@@ -65,7 +66,8 @@ export default function SignupPage() {
 
   return (
     <AuthShell title="Create your account" subtitle="Start generating AI recipes for free">
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <GoogleButton next="/chat" />
+      <form onSubmit={handleSubmit} className="mt-4 space-y-4">
         {error && <ErrorBanner message={error} />}
         <div className="space-y-1.5">
           <label className="text-sm font-medium" htmlFor="name">Name</label>

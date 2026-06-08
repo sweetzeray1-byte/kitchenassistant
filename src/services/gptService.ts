@@ -1,6 +1,6 @@
 // src/services/gptService.ts
 
-import openai, { OpenAI, GPT_MODEL } from './openaiClient';
+import openai, { OpenAI, GPT_MODEL, GPT_MODEL_HIGH } from './openaiClient';
 import { buildRecipePrompt, buildChatPrompt } from '../utils/promptBuilder';
 import { logger } from '../utils/logger';
 import { AiChatResponseSchema, AiChatResponse } from '../schemas/chat.schema'; // Import our new schema
@@ -247,10 +247,11 @@ async function enhanceRecipe(recipeJson: string, assessment: QualityAssessment):
  */
 export const generateRecipeContent = async (
   query: string,
-  userPreferences?: { /* ... preferences ... */ }
+  userPreferences?: { /* ... preferences ... */ },
+  interpretedAs?: string | null
 ): Promise<string> => {
   try {
-    const { systemPrompt, userPrompt } = buildRecipePrompt(query, userPreferences);
+    const { systemPrompt, userPrompt } = buildRecipePrompt(query, userPreferences, interpretedAs);
     logger.info("gptService: Sending request to OpenAI for recipe JSON...");
     const response = await openai.chat.completions.create({
       model: GPT_MODEL,
@@ -343,8 +344,13 @@ export const generateChatResponse = async (
       };
     }
     
-    // Handle gibberish or spam (simple check for repeated characters)
-    if (/^(.)\1{10,}$/.test(sanitizedMessage) || /^[^a-zA-Z0-9\s]{20,}$/.test(sanitizedMessage)) {
+    // Handle gibberish or spam. IMPORTANT: this must be Unicode-aware — the previous
+    // check (`/^[^a-zA-Z0-9\s]{20,}$/`) flagged ANY non-Latin script (Arabic, Chinese,
+    // Hindi, Amharic, etc.) as gibberish and rejected it before the model ever ran.
+    // We now treat a message as gibberish only if it is a single repeated character,
+    // or contains no letters/numbers in ANY script (i.e. pure symbols/punctuation).
+    const hasLetterOrNumber = /[\p{L}\p{N}]/u.test(sanitizedMessage);
+    if (/^(.)\1{10,}$/u.test(sanitizedMessage) || (!hasLetterOrNumber && sanitizedMessage.length >= 20)) {
       return {
         reply: "I'm having trouble understanding that. How can I help you with cooking today?",
         suggestions: ["Browse recipes", "Get meal suggestions", "Ask about ingredients"],
@@ -356,20 +362,24 @@ export const generateChatResponse = async (
       sanitizedMessage = sanitizedMessage.substring(0, 4000);
     }
     
-    // Progressive retry strategy
+    // Progressive retry strategy. Chat ALWAYS uses the stronger model (GPT_MODEL_HIGH,
+    // default gpt-4o) — it is far better at the long tail of regional/cultural dish names,
+    // misspellings, and low-resource languages, which is core to the chat experience.
+    // (Recipe generation/categorization elsewhere still use the cheaper GPT_MODEL.)
     const attempts = [
-      { historySize: 10, temperature: 0.7, maxTokens: 1024 },
-      { historySize: 5, temperature: 0.6, maxTokens: 800 },
-      { historySize: 0, temperature: 0.5, maxTokens: 600 },
+      { historySize: 10, temperature: 0.7, maxTokens: 1024, model: GPT_MODEL_HIGH },
+      { historySize: 5, temperature: 0.6, maxTokens: 800, model: GPT_MODEL_HIGH },
+      { historySize: 0, temperature: 0.5, maxTokens: 600, model: GPT_MODEL_HIGH },
     ];
-    
+
     for (let i = 0; i < attempts.length; i++) {
       try {
         return await attemptChatCompletion(
           sanitizedMessage,
           messageHistory?.slice(-attempts[i].historySize),
           attempts[i].temperature,
-          attempts[i].maxTokens
+          attempts[i].maxTokens,
+          attempts[i].model
         );
       } catch (error) {
         logger.error(`Attempt ${i + 1} failed:`, { 
@@ -400,7 +410,8 @@ async function attemptChatCompletion(
     message: string,
     messageHistory?: MessageHistoryItem[],
     temperature: number = 0.7,
-    maxTokens: number = 1024
+    maxTokens: number = 1024,
+    model: string = GPT_MODEL
 ): Promise<AiChatResponse> {
     // Use the centralized Concierge system prompt (single source of truth in promptBuilder).
     const { systemPrompt } = buildChatPrompt(message);
@@ -423,7 +434,7 @@ async function attemptChatCompletion(
 
     try {
         const response = await openai.chat.completions.create({
-            model: GPT_MODEL,
+            model: model,
             messages: messages,
             temperature: temperature,
             max_tokens: maxTokens,
@@ -442,6 +453,12 @@ async function attemptChatCompletion(
             reply: String(parsed.reply || "I can help you with that! What would you like to cook?"),
             suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions.map(String) : [],
         };
+
+        // Normalized canonical dish/ingredient term (misspellings corrected, regional/
+        // non-English food words translated). Used for "Did you mean…?" + recipe generation.
+        if (parsed.interpreted_as != null && String(parsed.interpreted_as).trim() !== '') {
+            cleaned.interpreted_as = String(parsed.interpreted_as).trim();
+        }
 
         // Extract structured Concierge intent metadata for the frontend RecipeIntentCard.
         if (parsed.intent_meta && typeof parsed.intent_meta === 'object') {

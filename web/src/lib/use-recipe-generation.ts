@@ -21,6 +21,8 @@ export function useRecipeGeneration() {
   const [partial, setPartial] = useState<Recipe | null>(null);
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** True when generation failed because the user hit their plan's limit (HTTP 402/403). */
+  const [limitReached, setLimitReached] = useState(false);
   const [requestId, setRequestId] = useState<string | null>(null);
 
   const cancelledRef = useRef(false);
@@ -42,6 +44,7 @@ export function useRecipeGeneration() {
     setPartial(null);
     setRecipe(null);
     setError(null);
+    setLimitReached(false);
     setRequestId(null);
   }, []);
 
@@ -112,6 +115,7 @@ export function useRecipeGeneration() {
       setPartial(null);
       setRecipe(null);
       setError(null);
+      setLimitReached(false);
       startedAtRef.current = Date.now();
 
       try {
@@ -121,6 +125,10 @@ export function useRecipeGeneration() {
         setStatus("processing");
         timerRef.current = setTimeout(() => void poll(res.requestId), POLL_INTERVAL_MS);
       } catch (err) {
+        // A 402 (payment required) / 403 means the user hit their plan limit.
+        if (err instanceof ApiError && (err.status === 402 || err.status === 403)) {
+          setLimitReached(true);
+        }
         setStatus("failed");
         setError(err instanceof Error ? err.message : "Failed to start generation.");
       }
@@ -141,5 +149,5 @@ export function useRecipeGeneration() {
     }
   }, [requestId]);
 
-  return { status, progress, partial, recipe, error, requestId, start, cancel, reset };
+  return { status, progress, partial, recipe, error, limitReached, requestId, start, cancel, reset };
 }

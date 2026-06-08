@@ -52,7 +52,11 @@ export const recipeSchema = Joi.object({
       'string.max': 'Recipe query cannot exceed 200 characters',
       'any.required': 'Recipe query is required'
     }),
-  save: Joi.boolean().optional()
+  save: Joi.boolean().optional(),
+  // Optional canonical English normalization of the query supplied by the chat AI
+  // (misspellings corrected, regional/non-English dish names translated). Used to guide
+  // recipe generation. Allowed to be null when the client has no normalization.
+  interpreted_as: Joi.string().max(200).allow(null, '').optional()
 });
 
 // Chat message validation schema

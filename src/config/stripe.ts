@@ -22,25 +22,37 @@ if (!stripeApiKey) {
 export const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || '';
 
 /**
- * Stripe recurring Price IDs for each paid tier. Create these as monthly
+ * The "Pro" plan billing intervals, mirroring the mobile app (RevenueCat):
+ * Weekly / Monthly / Annual. They all grant the same entitlement and map to the
+ * `premium` tier in our system — only the Stripe price (and cadence) differs.
+ */
+export type ProPlan = 'weekly' | 'monthly' | 'annual';
+
+/**
+ * Stripe recurring Price IDs for each Pro billing interval. Create these as
  * recurring prices in the Stripe dashboard and set them in the environment.
  * The free tier has no Stripe price.
  */
-export const STRIPE_PRICE_IDS: Record<Exclude<SubscriptionTier, 'free'>, string> = {
-  basic: process.env.STRIPE_PRICE_BASIC || '',
-  premium: process.env.STRIPE_PRICE_PREMIUM || '',
+export const STRIPE_PRO_PRICE_IDS: Record<ProPlan, string> = {
+  weekly: process.env.STRIPE_PRICE_PRO_WEEKLY || '',
+  monthly: process.env.STRIPE_PRICE_PRO_MONTHLY || '',
+  annual: process.env.STRIPE_PRICE_PRO_ANNUAL || '',
 };
 
-/** Map a paid tier to its configured Stripe Price ID (or null if not configured). */
-export const priceIdForTier = (tier: Exclude<SubscriptionTier, 'free'>): string | null => {
-  return STRIPE_PRICE_IDS[tier] || null;
+/** Map a Pro billing interval to its configured Stripe Price ID (or null). */
+export const priceIdForPlan = (plan: ProPlan): string | null => {
+  return STRIPE_PRO_PRICE_IDS[plan] || null;
 };
 
-/** Reverse-map a Stripe Price ID back to one of our subscription tiers. */
+/**
+ * Reverse-map a Stripe Price ID back to a subscription tier. Every configured
+ * Pro price (any interval) is the `premium` tier.
+ */
 export const tierForPriceId = (priceId?: string | null): SubscriptionTier | null => {
   if (!priceId) return null;
-  if (priceId === STRIPE_PRICE_IDS.premium) return 'premium';
-  if (priceId === STRIPE_PRICE_IDS.basic) return 'basic';
+  if (Object.values(STRIPE_PRO_PRICE_IDS).some((id) => id && id === priceId)) {
+    return 'premium';
+  }
   return null;
 };
 

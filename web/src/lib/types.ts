@@ -20,6 +20,8 @@ export interface RecipeStep {
 export interface Recipe {
   id?: string;
   title: string;
+  // Appetizing 2-4 sentence intro/headnote (English). Used on-page + for SEO metadata/JSON-LD.
+  description?: string | null;
   servings: number;
   ingredients: string[];
   steps: RecipeStep[];

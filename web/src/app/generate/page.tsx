@@ -24,7 +24,7 @@ function GenerateInner() {
   const qParam = searchParams.get("q");
 
   const [input, setInput] = useState("");
-  const { status, progress, partial, recipe, error, start, cancel, reset } =
+  const { status, progress, partial, recipe, error, limitReached, start, cancel, reset } =
     useRecipeGeneration();
   const autoStarted = useRef(false);
 
@@ -116,11 +116,23 @@ function GenerateInner() {
       {(status === "failed" || status === "cancelled") && (
         <div className="mx-auto max-w-2xl space-y-4 text-center">
           {status === "failed" ? (
-            <ErrorBanner message={error || "Recipe generation failed."} />
+            limitReached ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-6 text-amber-900">
+                <h2 className="text-lg font-bold">You&apos;ve hit your plan&apos;s limit</h2>
+                <p className="mt-2 text-sm">
+                  {error || "You've reached your recipe generation limit for this period."}
+                </p>
+                <LinkButton href="/pricing" className="mt-4">
+                  Upgrade your plan
+                </LinkButton>
+              </div>
+            ) : (
+              <ErrorBanner message={error || "Recipe generation failed."} />
+            )
           ) : (
             <p className="text-muted-foreground">Generation cancelled.</p>
           )}
-          <Button onClick={reset}>Try again</Button>
+          {!limitReached && <Button onClick={reset}>Try again</Button>}
         </div>
       )}
 

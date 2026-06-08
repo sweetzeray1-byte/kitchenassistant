@@ -136,12 +136,18 @@ function ChatInner() {
       gen.reset();
     } else if (gen.status === "failed") {
       const msg = gen.error;
+      const hitLimit = gen.limitReached;
       setMessages((prev) => [
         ...prev,
         {
           id: crypto.randomUUID(),
           role: "assistant",
-          content: msg || "Sorry, I couldn't generate that recipe. Want to try a different one?",
+          content:
+            msg ||
+            (hitLimit
+              ? "You've reached your recipe generation limit for this plan."
+              : "Sorry, I couldn't generate that recipe. Want to try a different one?"),
+          isLimit: hitLimit,
         },
       ]);
       gen.reset();

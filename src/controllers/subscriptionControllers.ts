@@ -177,15 +177,15 @@ export const createCheckoutSessionController = async (req: Request, res: Respons
     const email = req.user?.email as string | undefined;
     if (!userId) return next(new AppError('Authentication required', 401));
 
-    // Accept the tier directly from the web client; fall back to mapping a raw Price ID.
-    const { tier, successUrl, cancelUrl } = req.body as {
-      tier?: string;
+    // The web client picks a Pro billing interval (weekly / monthly / annual).
+    const { plan, successUrl, cancelUrl } = req.body as {
+      plan?: string;
       successUrl?: string;
       cancelUrl?: string;
     };
 
-    if (tier !== 'basic' && tier !== 'premium') {
-        return next(new AppError("A valid 'tier' ('basic' or 'premium') is required.", 400));
+    if (plan !== 'weekly' && plan !== 'monthly' && plan !== 'annual') {
+        return next(new AppError("A valid 'plan' ('weekly', 'monthly', or 'annual') is required.", 400));
     }
 
     // Guard against double-subscribing across platforms. If the user already holds an
@@ -205,7 +205,7 @@ export const createCheckoutSessionController = async (req: Request, res: Respons
     const cancel = cancelUrl || `${WEB_BASE_URL}/pricing?checkout=cancelled`;
 
     try {
-        const checkoutUrl = await createCheckoutSession(userId, email, tier, success, cancel);
+        const checkoutUrl = await createCheckoutSession(userId, email, plan, success, cancel);
         if (!checkoutUrl) return next(new AppError('Failed to create Stripe checkout session', 500));
         res.status(200).json({ checkoutUrl });
     } catch (error) {

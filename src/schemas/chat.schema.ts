@@ -29,6 +29,11 @@ export const AiChatResponseSchema = z.object({
   error: z.string().optional(),
   // Concierge intent metadata. Optional so older/fallback responses remain valid.
   intent_meta: IntentMetaSchema.optional(),
+  // The user's intent normalized to a canonical English dish/ingredient term, after
+  // correcting misspellings/slang and translating regional or non-English food words.
+  // Null when there is no concrete dish to normalize (e.g. pure greetings). Used for
+  // "Did you mean…?" hints and to hand a clean query to the recipe generator.
+  interpreted_as: z.string().nullable().optional(),
 });
 
 /**
