@@ -136,7 +136,10 @@ export const imageWorker = new Worker<ImageJobData, ImageJobResult>(
     connection: redisClient,
     prefix: CONNECTION_OPTIONS.prefix,
     concurrency: process.env.IMAGE_WORKER_CONCURRENCY ? parseInt(process.env.IMAGE_WORKER_CONCURRENCY, 10) : 2,
-    stalledInterval: 45000,
+    // Idle long-poll interval (seconds), raised from the 5s default to cut idle Redis
+    // commands ~12x. Job pickup is unaffected (blocking pop wakes on push).
+    drainDelay: 60,
+    stalledInterval: 180000, // 3 min stalled sweep (was 45s)
     lockDuration: 180000,
     lockRenewTime: 60000,
   }

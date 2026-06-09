@@ -86,8 +86,11 @@ const chatWorker = new Worker<ChatJobData, ChatJobResult, 'process-message'>(
     connection: redisClient,
     prefix: CONNECTION_OPTIONS.prefix,
     concurrency: process.env.CHAT_WORKER_CONCURRENCY ? parseInt(process.env.CHAT_WORKER_CONCURRENCY, 10) : 3,
-    stalledInterval: 30000,
-    lockDuration: 60000, 
+    // Idle long-poll interval (seconds), raised from the 5s default to cut idle Redis
+    // commands ~12x. Job pickup is unaffected (blocking pop wakes on push).
+    drainDelay: 60,
+    stalledInterval: 120000, // 2 min stalled sweep (was 30s)
+    lockDuration: 60000,
     lockRenewTime: 30000,
   }
 );

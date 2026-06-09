@@ -291,7 +291,12 @@ export const recipeWorker = new Worker<RecipeJobData, RecipeJobResult, 'generate
         connection: redisClient,
         prefix: CONNECTION_OPTIONS.prefix,
         concurrency: process.env.RECIPE_WORKER_CONCURRENCY ? parseInt(process.env.RECIPE_WORKER_CONCURRENCY, 10) : 2,
-        stalledInterval: 60000,
+        // Idle long-poll interval (seconds). Raised from the 5s default to cut ~12x the
+        // Redis commands issued while the queue is empty. Does NOT delay job pickup — the
+        // blocking pop returns immediately when a job is added. Big saving on Upstash's
+        // per-command free tier.
+        drainDelay: 60,
+        stalledInterval: 300000, // 5 min stalled-job sweep (was 60s) — fewer idle Redis ops
         lockDuration: 300000, // 5 minutes, adjust based on typical generation time
         lockRenewTime: 150000, // Renew lock halfway through duration
     }
