@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { RecipeDetail } from "@/components/recipe-detail";
 import type { Recipe } from "@/lib/types";
+import { breadcrumbJsonLd, jsonLdScript } from "@/lib/seo";
+import { titleCase } from "@/lib/utils";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ??
@@ -58,7 +60,8 @@ export async function generateMetadata({
   return {
     title,
     description,
-    openGraph: { title, description, type: "article", images: ogImages },
+    alternates: { canonical: `/recipe/${id}` },
+    openGraph: { title, description, type: "article", url: `/recipe/${id}`, images: ogImages },
     twitter: {
       card: recipe.thumbnail_url ? "summary_large_image" : "summary",
       title,
@@ -123,14 +126,35 @@ export default async function RecipePage({
       }
     : null;
 
+  // Breadcrumb trail (Home › Discover › [Category] › Recipe) reinforces taxonomy in the SERP.
+  const breadcrumb = recipe
+    ? breadcrumbJsonLd([
+        { name: "Home", path: "/" },
+        { name: "Discover", path: "/discover" },
+        ...(recipe.category
+          ? [
+              {
+                name: titleCase(recipe.category),
+                path: `/discover?category=${encodeURIComponent(recipe.category)}`,
+              },
+            ]
+          : []),
+        { name: recipe.title, path: `/recipe/${id}` },
+      ])
+    : null;
+
   return (
     <>
       {jsonLd && (
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c"),
-          }}
+          dangerouslySetInnerHTML={{ __html: jsonLdScript(jsonLd) }}
+        />
+      )}
+      {breadcrumb && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: jsonLdScript(breadcrumb) }}
         />
       )}
       <RecipeDetail id={id} />

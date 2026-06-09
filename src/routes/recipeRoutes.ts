@@ -14,10 +14,12 @@ import {
   getFavoriteRecipes, 
   addFavoriteRecipe, 
   removeFavoriteRecipe, 
-  getDiscoverRecipes, 
-  getPopularRecipes, 
-  getCategoryRecipes, 
-  getAllCategories 
+  getDiscoverRecipes,
+  getPopularRecipes,
+  getCategoryRecipes,
+  getAllCategories,
+  getRecipesForSitemap,
+  getRecipesByIngredient
 } from '../services/supabaseService';
 import { validateRequest, recipeSchema } from '../utils/validationUtils';
 import { AppError } from '../middleware/errorMiddleware';
@@ -77,7 +79,7 @@ router.get('/favorites', authenticate, async (req, res, next) => {
  */
 router.get('/discover', optionalAuthenticate, async (req, res, next) => {
   try {
-    const { category, tags, sort = 'recent', limit = 20, offset = 0, query } = req.query;
+    const { category, tags, sort = 'recent', limit = 20, offset = 0, query, ingredient } = req.query;
 
     // Process tags from comma-separated string if provided
     let tagsArray;
@@ -86,15 +88,23 @@ router.get('/discover', optionalAuthenticate, async (req, res, next) => {
     }
 
     const searchQuery = typeof query === 'string' ? query : undefined;
+    const ingredientTerm = typeof ingredient === 'string' ? ingredient : undefined;
+    const limitNum = typeof limit === 'string' ? parseInt(limit) : 20;
+    const offsetNum = typeof offset === 'string' ? parseInt(offset) : 0;
+    const sortStr = typeof sort === 'string' ? sort : 'recent';
 
-    const recipes = await getDiscoverRecipes({
-      category: typeof category === 'string' ? category : undefined,
-      tags: tagsArray,
-      sort: typeof sort === 'string' ? sort : 'recent',
-      limit: typeof limit === 'string' ? parseInt(limit) : 20,
-      offset: typeof offset === 'string' ? parseInt(offset) : 0,
-      query: searchQuery,
-    });
+    // When an `ingredient` is given, search titles AND the ingredients array (better recall
+    // for ingredient hubs); otherwise fall back to the standard category/tag/title discovery.
+    const recipes = ingredientTerm
+      ? await getRecipesByIngredient(ingredientTerm, { limit: limitNum, offset: offsetNum, sort: sortStr })
+      : await getDiscoverRecipes({
+          category: typeof category === 'string' ? category : undefined,
+          tags: tagsArray,
+          sort: sortStr,
+          limit: limitNum,
+          offset: offsetNum,
+          query: searchQuery,
+        });
 
     // --- MAGIC SEARCH: when a search yields no existing recipes, tell the frontend it can
     // offer "Create this recipe with AI right now" (the MagicSearchCard funnel). ---
@@ -139,6 +149,22 @@ router.get('/categories', async (req, res, next) => {
     const categories = await getAllCategories();
 
     res.status(200).json({ categories });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * @route   GET /api/recipes/sitemap
+ * @desc    Lightweight list of all public recipes (id + lastModified) for the web sitemap.
+ *          Defined before '/:id' so the literal path isn't captured by the dynamic param.
+ * @access  Public
+ */
+router.get('/sitemap', async (req, res, next) => {
+  try {
+    const recipes = await getRecipesForSitemap();
+    res.set('Cache-Control', 'public, max-age=3600');
+    res.status(200).json({ recipes });
   } catch (error) {
     next(error);
   }

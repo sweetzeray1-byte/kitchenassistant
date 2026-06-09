@@ -294,6 +294,63 @@ export const getRecipeById = async (recipeId: string): Promise<Recipe | null> =>
   } catch (error) { logger.error('Error fetching recipe by ID:', { recipeId, error }); throw new Error(`Failed to fetch recipe: ${(error as Error).message}`);}
 };
 
+/** Maps a raw `recipes` row to the API `Recipe` shape (shared by list endpoints). */
+const mapRecipeRow = (item: Tables<'recipes'>): Recipe => ({
+  id: item.id, title: item.title, servings: item.servings ?? 0, ingredients: item.ingredients ?? [],
+  steps: item.steps ? (item.steps as unknown as RecipeStep[]) : [],
+  nutrition: item.nutrition ? (item.nutrition as unknown as NutritionInfo) : { calories: 0, protein: '0g', fat: '0g', carbs: '0g' },
+  query: item.query ?? '', createdAt: new Date(item.created_at ?? Date.now()),
+  prepTime: item.prep_time_minutes ?? undefined, cookTime: item.cook_time_minutes ?? undefined, totalTime: item.total_time_minutes ?? undefined,
+  category: item.category ?? undefined, tags: item.tags as string[] | undefined, views: item.views ?? 0, quality_score: item.quality_score ?? undefined,
+  description: item.description ?? undefined,
+  thumbnail_url: item.thumbnail_url ?? undefined,
+  isLocked: item.is_locked ?? false,
+});
+
+/**
+ * Searches PUBLIC recipes (user_id IS NULL) for an ingredient term, matching against
+ * BOTH the title and any element of the `ingredients` array (case-insensitive substring).
+ * Powers the programmatic ingredient hubs (e.g. /ingredients/ground-beef) with far better
+ * recall than a title-only ILIKE.
+ *
+ * Implementation: PostgREST can't do substring matching on text[] elements, so we fetch a
+ * candidate set of public recipes and filter in memory. The public catalog is small and the
+ * hub pages are ISR-cached, so this is cheap. SCALE-UP PATH: replace with a Postgres RPC
+ * using `EXISTS (SELECT 1 FROM unnest(ingredients) i WHERE i ILIKE '%term%')` + a GIN index.
+ */
+export const getRecipesByIngredient = async (
+  term: string,
+  { limit = 24, offset = 0, sort = 'popular' }: { limit?: number; offset?: number; sort?: string } = {},
+): Promise<Recipe[]> => {
+  try {
+    const needle = term.toLowerCase().trim();
+    if (!needle) return [];
+    logger.info(`Fetching recipes by ingredient: "${needle}" (sort=${sort}, limit=${limit}, offset=${offset})`);
+
+    let queryBuilder = supabase.from('recipes').select('*').is('user_id', null);
+    if (sort === 'popular') { queryBuilder = queryBuilder.order('views', { ascending: false, nullsFirst: false }); }
+    else { queryBuilder = queryBuilder.order('created_at', { ascending: false }); }
+    // Candidate cap — the public catalog is small; raise (or move to an RPC) if it grows.
+    queryBuilder = queryBuilder.range(0, 999);
+
+    const { data, error } = await queryBuilder;
+    if (error) { logger.error('Error fetching recipes by ingredient', { needle, error }); throw error; }
+    if (!data) { return []; }
+
+    const matched = data.filter((item) => {
+      const inTitle = (item.title ?? '').toLowerCase().includes(needle);
+      const inIngredients = Array.isArray(item.ingredients)
+        && item.ingredients.some((i) => typeof i === 'string' && i.toLowerCase().includes(needle));
+      return inTitle || inIngredients;
+    });
+
+    return matched.slice(offset, offset + limit).map(mapRecipeRow);
+  } catch (error) {
+    logger.error('Error fetching recipes by ingredient:', error);
+    throw new Error(`Failed to fetch recipes by ingredient: ${(error as Error).message}`);
+  }
+};
+
 /**
  * Gets recipes for discovery based on filters AND optional search query
  * (Fetches only global recipes where user_id is null)
@@ -326,6 +383,32 @@ export const getDiscoverRecipes = async ({ category, tags, sort = 'recent', limi
       isLocked: item.is_locked ?? false, // Tease & Lock state
     }));
   } catch (error) { logger.error('Error fetching discover recipes:', error); throw new Error(`Failed to fetch discover recipes: ${(error as Error).message}`); }
+};
+
+/**
+ * Lightweight list of all PUBLIC recipes (user_id IS NULL) for sitemap generation.
+ * Returns only id + last-modified timestamp to keep the payload small. Used by the
+ * web app's app/sitemap.ts. NOTE: relies on PostgREST's default max-rows (~1000);
+ * if public recipes ever exceed that, switch this to keyset pagination.
+ */
+export const getRecipesForSitemap = async (): Promise<{ id: string; updatedAt: string }[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('recipes')
+      .select('id, updated_at, created_at')
+      .is('user_id', null)
+      .order('updated_at', { ascending: false, nullsFirst: false })
+      .range(0, 9999);
+    if (error) { logger.error('Error fetching recipes for sitemap', { error }); throw error; }
+    if (!data) { return []; }
+    return data.map((r) => ({
+      id: r.id,
+      updatedAt: r.updated_at ?? r.created_at ?? new Date().toISOString(),
+    }));
+  } catch (error) {
+    logger.error('Error fetching recipes for sitemap:', error);
+    throw new Error(`Failed to fetch recipes for sitemap: ${(error as Error).message}`);
+  }
 };
 
 /**

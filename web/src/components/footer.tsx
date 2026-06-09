@@ -15,6 +15,17 @@ const COLUMNS: { heading: string; links: { label: string; href: string }[] }[] =
     ],
   },
   {
+    heading: "Browse",
+    links: [
+      { label: "Ground Beef Recipes", href: "/ingredients/ground-beef" },
+      { label: "Chicken Recipes", href: "/ingredients/chicken" },
+      { label: "Lunch Ideas", href: "/meals/lunch" },
+      { label: "Dinner Ideas", href: "/meals/dinner" },
+      { label: "Healthy Recipes", href: "/recipes/healthy" },
+      { label: "Pasta Recipes", href: "/recipes/pasta" },
+    ],
+  },
+  {
     heading: "Company",
     links: [
       { label: "About us", href: "/about" },
@@ -39,7 +50,7 @@ export function Footer() {
   return (
     <footer className="mt-auto border-t border-border bg-muted/40">
       <div className="mx-auto max-w-6xl px-4 py-12">
-        <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-[1.5fr_repeat(3,1fr)]">
+        <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-[1.5fr_repeat(4,1fr)]">
           {/* Brand */}
           <div>
             <Logo />
