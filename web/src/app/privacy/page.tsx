@@ -4,7 +4,7 @@ export const metadata = {
     "How Kitchen Assistant AI, operated by RoseXLab, collects, uses, shares, and protects your information.",
 };
 
-const SUPPORT_EMAIL = "[insert your support email]";
+const SUPPORT_EMAIL = "support@kitchenassistant.com";
 
 const providers: { name: string; role: string }[] = [
   { name: "OpenAI", role: "Processes text you enter to generate recipes and chat responses." },
