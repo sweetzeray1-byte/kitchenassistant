@@ -1,3 +1,5 @@
+//web\src\app\terms\page.tsx
+
 import type { Metadata } from "next";
 import { PageShell, Section, List, ProseLink } from "@/components/page-shell";
 
@@ -7,7 +9,7 @@ export const metadata: Metadata = {
     "The terms and conditions that govern your use of Kitchen Assistant, our AI recipe generation service, website, and mobile app.",
 };
 
-const SUPPORT_EMAIL = "support@kitchenassistant.app";
+const SUPPORT_EMAIL = "support@kitchen-assistant.co";
 
 export default function TermsPage() {
   return (
@@ -20,11 +22,11 @@ export default function TermsPage() {
       <Section title="1. Agreement to terms">
         <p>
           These Terms of Service (&quot;Terms&quot;) form a binding agreement between you and
-          Kitchen Assistant (&quot;Kitchen Assistant,&quot; &quot;we,&quot; &quot;us,&quot; or
-          &quot;our&quot;) and govern your access to and use of our website, mobile
-          applications, AI recipe generation tools, and related services (collectively, the
-          &quot;Service&quot;). By creating an account or using the Service, you agree to be
-          bound by these Terms and our{" "}
+          Kitchen Assistant, a service operated by RoseXLab (&quot;Kitchen Assistant,&quot;
+          &quot;we,&quot; &quot;us,&quot; or &quot;our&quot;) and govern your access to and use
+          of our website, mobile applications, AI recipe generation tools, and related services
+          (collectively, the &quot;Service&quot;). By creating an account or using the Service,
+          you agree to be bound by these Terms and our{" "}
           <ProseLink href="/privacy">Privacy Policy</ProseLink>. If you do not agree, please
           do not use the Service.
         </p>

@@ -1,10 +1,12 @@
+//web\src\app\privacy\page.tsx
+
 export const metadata = {
   title: "Privacy Policy — Kitchen Assistant AI",
   description:
     "How Kitchen Assistant AI, operated by RoseXLab, collects, uses, shares, and protects your information.",
 };
 
-const SUPPORT_EMAIL = "support@kitchenassistant.com";
+const SUPPORT_EMAIL = "support@kitchen-assistant.co";
 
 const providers: { name: string; role: string }[] = [
   { name: "OpenAI", role: "Processes text you enter to generate recipes and chat responses." },
@@ -46,8 +48,8 @@ export default function PrivacyPolicy() {
             This Privacy Policy explains how Kitchen Assistant AI (&ldquo;we&rdquo;,
             &ldquo;us&rdquo;, &ldquo;our&rdquo;, or the &ldquo;App&rdquo;), operated by
             RoseXLab, collects, uses, shares, and protects your information when you use
-            our mobile application and related services. By using the App, you agree to
-            the practices described here. If you have questions, contact us at{" "}
+            our website, mobile application, and related services. By using the Service,
+            you agree to the practices described here. If you have questions, contact us at{" "}
             <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.
           </p>
         </header>
@@ -173,7 +175,7 @@ export default function PrivacyPolicy() {
 
         <Section n="08" title="Children&rsquo;s Privacy">
           <p>
-            The App is not directed to children under 13 (or the minimum age in your
+            The App is not directed to children under 16 (or the minimum age in your
             jurisdiction), and we do not knowingly collect personal data from children. If
             you believe a child has provided us personal data, contact us and we will
             delete it.
